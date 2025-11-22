@@ -28,6 +28,10 @@ BULK_ADD_HINT = (
     "Если дата не указана — возьмем текущую."
 )
 
+# Константы для пагинации
+ITEMS_PER_PAGE = 10
+
+
 def _parse_bulk_lines(text: str, record_type: str) -> Tuple[List[dict], List[str]]:
     entries = []
     errors = []
@@ -71,6 +75,7 @@ def _parse_bulk_lines(text: str, record_type: str) -> Tuple[List[dict], List[str
     
     return entries, errors
 
+
 async def bulk_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
@@ -82,6 +87,7 @@ async def bulk_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Что будем добавлять массово?", reply_markup=reply_markup)
     return WAITING_FOR_BULK_TYPE
 
+
 async def bulk_add_choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     record_type = update.callback_query.data.replace("bulk_add_", "")
@@ -90,6 +96,7 @@ async def bulk_add_choose_type(update: Update, context: ContextTypes.DEFAULT_TYP
         f"Выбран тип: {'расходы' if record_type == 'expenses' else 'доходы'}.\n\n{BULK_ADD_HINT}"
     )
     return WAITING_FOR_BULK_DATA
+
 
 async def bulk_add_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     record_type = context.user_data.get('bulk_add_type')
@@ -123,6 +130,44 @@ async def bulk_add_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop('bulk_add_type', None)
     return ConversationHandler.END
 
+
+def create_bulk_delete_keyboard(items, page, record_type):
+    """Создает клавиатуру с пагинацией для массового удаления"""
+    total_items = len(items)
+    total_pages = (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+    
+    start_idx = page * ITEMS_PER_PAGE
+    end_idx = min(start_idx + ITEMS_PER_PAGE, total_items)
+    
+    buttons = []
+    for item in items[start_idx:end_idx]:
+        descriptor = item.get('category') or item.get('source')
+        date_value = item.get('date')
+        date_str = format_date(date_value) if date_value else "Без даты"
+        label = f"ID {item['id']}: {format_currency(item['amount'])} руб., {descriptor} ({date_str})"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"bulk_ignore_{item['id']}")])
+    
+    # Навигационные кнопки
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton("⬅️ Назад", callback_data=f"bulk_page_{page-1}"))
+    
+    if page < total_pages - 1:
+        nav_buttons.append(InlineKeyboardButton("Вперед ➡️", callback_data=f"bulk_page_{page+1}"))
+    
+    if nav_buttons:
+        buttons.append(nav_buttons)
+    
+    # Информация о странице
+    if total_pages > 1:
+        buttons.append([InlineKeyboardButton(
+            f"Страница {page + 1} из {total_pages}",
+            callback_data="bulk_page_info"
+        )])
+    
+    return InlineKeyboardMarkup(buttons)
+
+
 async def bulk_delete_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
@@ -134,34 +179,65 @@ async def bulk_delete_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Выбери, что будем удалять:", reply_markup=reply_markup)
     return WAITING_FOR_BULK_DELETE_TYPE
 
+
 async def bulk_delete_choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     record_type = update.callback_query.data.replace("bulk_del_", "")
     context.user_data['bulk_delete_type'] = record_type
+    context.user_data['bulk_delete_page'] = 0
     user_id = update.effective_user.id
     
     if record_type == 'expenses':
-        items = db.get_last_expenses(user_id, limit=20)
-        title = "Последние расходы"
+        items = db.get_last_expenses(user_id, limit=50)
+        title = "Последние расходы (укажи ID через пробел/запятую):"
     else:
-        items = db.get_last_income(user_id, limit=20)
-        title = "Последние доходы"
+        items = db.get_last_income(user_id, limit=50)
+        title = "Последние доходы (укажи ID через пробел/запятую):"
     
     if not items:
         await update.callback_query.edit_message_text("Нет записей для удаления.")
         context.user_data.pop('bulk_delete_type', None)
         return ConversationHandler.END
     
-    lines = [f"{title} (укажи ID через пробел/запятую):"]
-    for item in items:
-        descriptor = item.get('category') or item.get('source')
-        date_value = item.get('date')
-        date_str = format_date(date_value) if date_value else "Без даты"
-        lines.append(
-            f"ID {item['id']}: {format_currency(item['amount'])} руб., {descriptor} ({date_str})"
-        )
-    await update.callback_query.edit_message_text("\n".join(lines))
+    context.user_data['bulk_delete_items'] = items
+    reply_markup = create_bulk_delete_keyboard(items, 0, record_type)
+    
+    await update.callback_query.edit_message_text(
+        f"{title}\n(Отсортировано по дате, новые сверху)",
+        reply_markup=reply_markup
+    )
     return WAITING_FOR_BULK_DELETE_IDS
+
+
+async def handle_bulk_page_navigation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка навигации по страницам при массовом удалении"""
+    await update.callback_query.answer()
+    
+    if update.callback_query.data == "bulk_page_info":
+        return
+    
+    if update.callback_query.data.startswith("bulk_ignore_"):
+        await update.callback_query.answer("Это только для просмотра. Введи ID в сообщении.", show_alert=True)
+        return
+    
+    page = int(update.callback_query.data.replace("bulk_page_", ""))
+    items = context.user_data.get('bulk_delete_items', [])
+    record_type = context.user_data.get('bulk_delete_type')
+    
+    if not items:
+        await update.callback_query.edit_message_text("Список устарел. Начни заново.")
+        return
+    
+    context.user_data['bulk_delete_page'] = page
+    reply_markup = create_bulk_delete_keyboard(items, page, record_type)
+    
+    title = "Последние расходы (укажи ID через пробел/запятую):" if record_type == 'expenses' else "Последние доходы (укажи ID через пробел/запятую):"
+    
+    await update.callback_query.edit_message_text(
+        f"{title}\n(Отсортировано по дате, новые сверху)",
+        reply_markup=reply_markup
+    )
+
 
 async def bulk_delete_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     record_type = context.user_data.get('bulk_delete_type')
@@ -189,7 +265,10 @@ async def bulk_delete_process(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     await update.message.reply_text(f"🗑 Удалено записей: {deleted}")
     context.user_data.pop('bulk_delete_type', None)
+    context.user_data.pop('bulk_delete_items', None)
+    context.user_data.pop('bulk_delete_page', None)
     return ConversationHandler.END
+
 
 bulk_add_handler = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^📥 Массовое добавление$"), bulk_add_start)],
@@ -214,6 +293,8 @@ bulk_delete_handler = ConversationHandler(
             CallbackQueryHandler(bulk_delete_choose_type, pattern="^bulk_del_(expenses|income)$")
         ],
         WAITING_FOR_BULK_DELETE_IDS: [
+            CallbackQueryHandler(handle_bulk_page_navigation, pattern="^bulk_page_"),
+            CallbackQueryHandler(handle_bulk_page_navigation, pattern="^bulk_ignore_"),
             MessageHandler(filters.TEXT & ~filters.COMMAND, bulk_delete_process)
         ]
     },
@@ -222,4 +303,3 @@ bulk_delete_handler = ConversationHandler(
         MessageHandler(filters.Regex(f"^{BACK_BUTTON_TEXT}$"), cancel)
     ]
 )
-

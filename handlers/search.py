@@ -10,15 +10,30 @@ from config import WAITING_FOR_SEARCH_QUERY, BACK_BUTTON_TEXT
 
 db = Database()
 
-SEARCH_HINT = (
-    "Введи ключевое слово для поиска по описанию, категории или источнику.\n"
-    "Используй префикс «расход:» или «доход:», чтобы искать только в нужном типе.\n"
-    "Пример: «расход:еда» или «доход:зарплата»."
-)
+SEARCH_HINT = """🔍 Инструкция по поиску:
+
+📝 Основные возможности:
+• Поиск работает по описанию, категории расходов и источнику доходов
+• Регистр букв не имеет значения
+• Можно искать по части слова
+
+🎯 Специальные префиксы:
+• расход: или expense: — искать только в расходах
+• доход: или income: — искать только в доходах
+
+💡 Примеры использования:
+• "еда" — найдет все записи со словом "еда"
+• "расход:транспорт" — только расходы на транспорт
+• "доход:зарплата" — только доходы от зарплаты
+• "продукты" — все записи со словом "продукты"
+
+Введи поисковый запрос:"""
+
 
 async def search_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(SEARCH_HINT)
     return WAITING_FOR_SEARCH_QUERY
+
 
 async def search_execute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -26,50 +41,68 @@ async def search_execute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     txn_type = "all"
     lowered = text.lower()
-    if lowered.startswith("расход:"):
+    
+    # Проверка префиксов на русском и английском
+    if lowered.startswith("расход:") or lowered.startswith("expense:"):
         txn_type = "expenses"
         text = text.split(":", 1)[1].strip()
-    elif lowered.startswith("доход:"):
+    elif lowered.startswith("доход:") or lowered.startswith("income:"):
         txn_type = "income"
         text = text.split(":", 1)[1].strip()
     
     if not text:
-        await update.message.reply_text("Запрос пустой. Попробуй снова или отправь /cancel.")
+        await update.message.reply_text(
+            "❌ Запрос пустой. Введи поисковое слово или фразу.\n"
+            "Отправь /cancel для выхода из режима поиска."
+        )
         return WAITING_FOR_SEARCH_QUERY
     
-    results = db.search_transactions(user_id, text, txn_type, limit=10)
+    results = db.search_transactions(user_id, text, txn_type, limit=15)
     response = []
+    total_found = len(results["expenses"]) + len(results["income"])
+    
+    if total_found == 0:
+        await update.message.reply_text(
+            f"🔍 По запросу «{text}» ничего не найдено.\n\n"
+            "💡 Советы:\n"
+            "• Проверь правильность написания\n"
+            "• Попробуй использовать часть слова\n"
+            "• Используй префиксы расход:/доход: для точного поиска"
+        )
+        return ConversationHandler.END
+    
+    response.append(f"🔍 Найдено записей: {total_found}\n")
     
     if txn_type in ("all", "expenses"):
         expenses = results["expenses"]
         if expenses:
-            response.append("💸 Расходы:")
+            response.append(f"💸 Расходы ({len(expenses)}):")
             for exp in expenses:
                 desc = f" • {exp['description']}" if exp.get('description') else ""
                 date_value = exp.get('date')
+                date_str = format_date(date_value) if date_value else "Без даты"
                 response.append(
-                    f"  • {format_currency(exp['amount'])} руб. — {exp['category']}{desc} "
-                    f"({format_date(date_value) if date_value else 'Без даты'})"
+                    f"  • {format_currency(exp['amount'])} руб. — {exp['category']}{desc}\n"
+                    f"    📅 {date_str}"
                 )
+            response.append("")
     
     if txn_type in ("all", "income"):
         incomes = results["income"]
         if incomes:
-            response.append("💰 Доходы:")
+            response.append(f"💰 Доходы ({len(incomes)}):")
             for inc in incomes:
                 desc = f" • {inc['description']}" if inc.get('description') else ""
                 date_value = inc.get('date')
+                date_str = format_date(date_value) if date_value else "Без даты"
                 response.append(
-                    f"  • {format_currency(inc['amount'])} руб. — {inc['source']}{desc} "
-                    f"({format_date(date_value) if date_value else 'Без даты'})"
+                    f"  • {format_currency(inc['amount'])} руб. — {inc['source']}{desc}\n"
+                    f"    📅 {date_str}"
                 )
     
-    if not response:
-        await update.message.reply_text("Ничего не найдено. Попробуй уточнить запрос.")
-    else:
-        await update.message.reply_text("\n".join(response))
-    
+    await update.message.reply_text("\n".join(response))
     return ConversationHandler.END
+
 
 search_handler = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^🔍 Поиск$"), search_start)],
@@ -83,4 +116,3 @@ search_handler = ConversationHandler(
         MessageHandler(filters.Regex(f"^{BACK_BUTTON_TEXT}$"), cancel)
     ]
 )
-

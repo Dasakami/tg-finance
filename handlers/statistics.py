@@ -11,6 +11,7 @@ from charts import create_statistics_chart
 logger = logging.getLogger(__name__)
 db = Database()
 
+
 async def show_statistics_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
@@ -22,15 +23,18 @@ async def show_statistics_menu(update: Update, context: ContextTypes.DEFAULT_TYP
             InlineKeyboardButton("30 дней", callback_data="stat_30")
         ],
         [
-            InlineKeyboardButton("90 дней", callback_data="stat_90")
+            InlineKeyboardButton("90 дней", callback_data="stat_90"),
+            InlineKeyboardButton("Все время", callback_data="stat_all")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Выбери период для просмотра статистики:", reply_markup=reply_markup)
 
+
 async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    days = int(update.callback_query.data.replace("stat_", ""))
+    days_str = update.callback_query.data.replace("stat_", "")
+    days = None if days_str == "all" else int(days_str)
     user_id = update.effective_user.id
     stats = db.get_statistics(user_id, days)
     
@@ -39,7 +43,8 @@ async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
         3: "Последние 3 дня",
         15: "Последние 15 дней",
         30: "Последние 30 дней",
-        90: "Последние 90 дней"
+        90: "Последние 90 дней",
+        None: "Все время"
     }.get(days, f"{days} дней")
     
     text = f"📊 Статистика за {period_name}\n\n"
@@ -59,6 +64,7 @@ async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"  • {src}: {format_currency(amount)} руб.\n"
     
     await update.callback_query.message.reply_text(text)
+
 
 async def show_last_3_days(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -105,6 +111,7 @@ async def show_last_3_days(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(text)
 
+
 async def show_export_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
@@ -115,23 +122,30 @@ async def show_export_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton("60 дней", callback_data="exp_60"),
             InlineKeyboardButton("90 дней", callback_data="exp_90")
+        ],
+        [
+            InlineKeyboardButton("Все время", callback_data="exp_all")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Выбери период для экспорта (5-90 дней):", reply_markup=reply_markup)
+    await update.message.reply_text("Выбери период для экспорта:", reply_markup=reply_markup)
+
 
 async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    days = int(update.callback_query.data.replace("exp_", ""))
+    days_str = update.callback_query.data.replace("exp_", "")
+    days = None if days_str == "all" else int(days_str)
     user_id = update.effective_user.id
+    
+    period_text = f"{days} дней" if days else "все время"
     
     try:
         file_path = export_to_excel(db, user_id, days)
         if file_path and os.path.exists(file_path):
             await update.callback_query.message.reply_document(
                 document=open(file_path, 'rb'),
-                filename=f"finance_export_{days}days.xlsx",
-                caption=f"📤 Экспорт данных за {days} дней"
+                filename=f"finance_export_{period_text.replace(' ', '_')}.xlsx",
+                caption=f"📤 Экспорт данных за {period_text}"
             )
             os.remove(file_path)
         else:
@@ -139,6 +153,7 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Export error: {e}")
         await update.callback_query.message.reply_text("❌ Произошла ошибка при экспорте данных.")
+
 
 async def show_pdf_export_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -150,23 +165,30 @@ async def show_pdf_export_menu(update: Update, context: ContextTypes.DEFAULT_TYP
         [
             InlineKeyboardButton("60 дней", callback_data="pdf_60"),
             InlineKeyboardButton("90 дней", callback_data="pdf_90")
+        ],
+        [
+            InlineKeyboardButton("Все время", callback_data="pdf_all")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Выбери период для PDF-отчета (5-90 дней):", reply_markup=reply_markup)
+    await update.message.reply_text("Выбери период для PDF-отчета:", reply_markup=reply_markup)
+
 
 async def handle_pdf_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    days = int(update.callback_query.data.replace("pdf_", ""))
+    days_str = update.callback_query.data.replace("pdf_", "")
+    days = None if days_str == "all" else int(days_str)
     user_id = update.effective_user.id
+    
+    period_text = f"{days} дней" if days else "все время"
     
     try:
         file_path = export_to_pdf(db, user_id, days)
         if file_path and os.path.exists(file_path):
             await update.callback_query.message.reply_document(
                 document=open(file_path, 'rb'),
-                filename=f"finance_report_{days}days.pdf",
-                caption=f"📄 PDF-отчет за {days} дней"
+                filename=f"finance_report_{period_text.replace(' ', '_')}.pdf",
+                caption=f"📄 PDF-отчет за {period_text}"
             )
             os.remove(file_path)
         else:
@@ -175,21 +197,68 @@ async def handle_pdf_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"PDF export error: {e}")
         await update.callback_query.message.reply_text("❌ Произошла ошибка при создании PDF.")
 
+
+async def show_chart_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню выбора периода для диаграммы"""
+    keyboard = [
+        [
+            InlineKeyboardButton("30 дней", callback_data="chart_30"),
+            InlineKeyboardButton("90 дней", callback_data="chart_90")
+        ],
+        [
+            InlineKeyboardButton("Все время", callback_data="chart_all")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Выбери период для диаграммы:", reply_markup=reply_markup)
+
+
 async def send_statistics_chart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправка диаграммы (для обратной совместимости - 30 дней)"""
+    # Если вызвано через кнопку меню, показываем меню выбора периода
+    if update.message:
+        await show_chart_menu(update, context)
+
+
+async def handle_chart_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка генерации диаграммы за выбранный период"""
+    await update.callback_query.answer()
+    days_str = update.callback_query.data.replace("chart_", "")
+    days = None if days_str == "all" else int(days_str)
     user_id = update.effective_user.id
-    stats = db.get_statistics(user_id, 30)
-    chart_path = create_statistics_chart(stats)
+    
+    period_text = {
+        30: "30 дней",
+        90: "90 дней",
+        None: "все время"
+    }.get(days, f"{days} дней")
+    
+    stats = db.get_statistics(user_id, days)
+    chart_path = create_statistics_chart(stats, period_text)
     
     if not chart_path or not os.path.exists(chart_path):
-        await update.message.reply_text("Недостаточно данных для построения диаграммы.")
+        await update.callback_query.message.reply_text("Недостаточно данных для построения диаграммы.")
         return
     
     try:
-        await update.message.reply_photo(
+        await update.callback_query.message.reply_photo(
             photo=open(chart_path, 'rb'),
-            caption="Диаграмма расходов/доходов за 30 дней"
+            caption=f"📈 Диаграмма расходов/доходов за {period_text}"
         )
     finally:
         if os.path.exists(chart_path):
             os.remove(chart_path)
 
+
+__all__ = [
+    'show_statistics_menu',
+    'show_last_3_days',
+    'show_export_menu',
+    'show_pdf_export_menu',
+    'show_statistics',
+    'handle_export',
+    'handle_pdf_export',
+    'send_statistics_chart',
+    'show_chart_menu',
+    'handle_chart_generation'
+]

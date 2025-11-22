@@ -2,17 +2,20 @@ from .common import start, cancel
 from .expenses import (
     expense_handler,
     delete_expense_handler,
-    delete_expense_callback
+    delete_expense_callback,
+    expense_page_callback
 )
 from .income import (
     income_handler,
     delete_income_handler,
-    delete_income_callback
+    delete_income_callback,
+    income_page_callback
 )
 from .statistics import (
     show_statistics_menu, show_last_3_days, show_export_menu,
     show_statistics, handle_export, show_pdf_export_menu,
-    handle_pdf_export, send_statistics_chart
+    handle_pdf_export, send_statistics_chart, show_chart_menu,
+    handle_chart_generation
 )
 from .bulk import bulk_add_handler, bulk_delete_handler
 from .search import search_handler
@@ -20,12 +23,12 @@ from .search import search_handler
 __all__ = [
     'start', 'cancel',
     'expense_handler', 'income_handler',
-    'delete_expense_handler', 'delete_expense_callback',
-    'delete_income_handler', 'delete_income_callback',
+    'delete_expense_handler', 'delete_expense_callback', 'expense_page_callback',
+    'delete_income_handler', 'delete_income_callback', 'income_page_callback',
     'bulk_add_handler', 'bulk_delete_handler',
     'show_statistics_menu', 'show_last_3_days', 'show_export_menu',
     'show_pdf_export_menu', 'show_statistics', 'handle_export',
-    'handle_pdf_export', 'send_statistics_chart',
+    'handle_pdf_export', 'send_statistics_chart', 'show_chart_menu',
+    'handle_chart_generation',
     'search_handler'
 ]
-

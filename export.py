@@ -5,23 +5,36 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
 from database import Database
 from utils import format_currency, format_date
 
-def export_to_excel(db: Database, user_id: int, days: int) -> str:
+
+def export_to_excel(db: Database, user_id: int, days: int = None) -> str:
+    """
+    Экспорт данных в Excel
+    
+    Args:
+        db: экземпляр базы данных
+        user_id: ID пользователя
+        days: количество дней или None для всех данных
+    """
     stats = db.get_statistics(user_id, days)
     
     wb = Workbook()
     ws = wb.active
-    ws.title = f"Финансы {days} дней"
+    period_text = f"{days} дней" if days else "все время"
+    ws.title = f"Финансы {period_text}"
     
     ws.merge_cells('A1:D1')
     header_cell = ws['A1']
-    header_cell.value = f"Финансовый отчет за {days} дней"
+    header_cell.value = f"Финансовый отчет за {period_text}"
     header_cell.font = Font(size=16, bold=True, color="FFFFFF")
     header_cell.alignment = Alignment(horizontal='center')
     header_cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
@@ -125,16 +138,39 @@ def export_to_excel(db: Database, user_id: int, days: int) -> str:
         adjusted_width = min(max_length + 2, 50)
         ws.column_dimensions[column_letter].width = adjusted_width
     
-    filename = f"finance_export_{user_id}_{days}days_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    period_suffix = f"{days}days" if days else "alltime"
+    filename = f"finance_export_{user_id}_{period_suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     filepath = os.path.join(os.getcwd(), filename)
     wb.save(filepath)
     
     return filepath
 
-def export_to_pdf(db: Database, user_id: int, days: int) -> str:
+
+def export_to_pdf(db: Database, user_id: int, days: int = None) -> str:
+    """
+    Экспорт данных в PDF с поддержкой кириллицы
+    
+    Args:
+        db: экземпляр базы данных
+        user_id: ID пользователя
+        days: количество дней или None для всех данных
+    """
     stats = db.get_statistics(user_id, days)
-    filename = f"finance_report_{user_id}_{days}days_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    period_suffix = f"{days}days" if days else "alltime"
+    filename = f"finance_report_{user_id}_{period_suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     filepath = os.path.join(os.getcwd(), filename)
+    
+    # Регистрация шрифта с поддержкой кириллицы
+    try:
+        # Попытка использовать системный шрифт DejaVu
+        pdfmetrics.registerFont(TTFont('DejaVu', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
+        pdfmetrics.registerFont(TTFont('DejaVu-Bold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
+        font_name = 'DejaVu'
+        font_bold = 'DejaVu-Bold'
+    except:
+        # Если не удалось, используем встроенный Helvetica (ограниченная поддержка кириллицы)
+        font_name = 'Helvetica'
+        font_bold = 'Helvetica-Bold'
     
     doc = SimpleDocTemplate(
         filepath,
@@ -144,13 +180,35 @@ def export_to_pdf(db: Database, user_id: int, days: int) -> str:
         topMargin=20 * mm,
         bottomMargin=20 * mm
     )
+    
+    # Создание стилей с кириллическим шрифтом
     styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Title'],
+        fontName=font_bold,
+        fontSize=18,
+        alignment=TA_CENTER,
+        spaceAfter=12
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontName=font_bold,
+        fontSize=14,
+        spaceAfter=6
+    )
+    
     story = []
     
-    title = Paragraph(f"Финансовый отчет за {days} дней", styles['Title'])
+    period_text = f"{days} дней" if days else "все время"
+    title = Paragraph(f"Финансовый отчет за {period_text}", title_style)
     story.append(title)
     story.append(Spacer(1, 12))
     
+    # Общая статистика
     summary_data = [
         ["Доходы", f"{format_currency(stats['total_income'])} руб."],
         ["Расходы", f"{format_currency(stats['total_expenses'])} руб."],
@@ -162,15 +220,16 @@ def export_to_pdf(db: Database, user_id: int, days: int) -> str:
     summary_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTNAME', (0, 0), (-1, -1), font_name),
         ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
         ('FONTSIZE', (0, 0), (-1, -1), 10)
     ]))
     story.append(summary_table)
     story.append(Spacer(1, 12))
     
+    # Расходы по категориям
     if stats['expenses_by_category']:
-        story.append(Paragraph("Расходы по категориям", styles['Heading2']))
+        story.append(Paragraph("Расходы по категориям", heading_style))
         expense_rows = [
             [category, f"{format_currency(amount)} руб."]
             for category, amount in sorted(stats['expenses_by_category'].items(), key=lambda x: x[1], reverse=True)
@@ -179,13 +238,15 @@ def export_to_pdf(db: Database, user_id: int, days: int) -> str:
         expense_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold')
+            ('FONTNAME', (0, 0), (-1, -1), font_name),
+            ('FONTNAME', (0, 0), (-1, 0), font_bold)
         ]))
         story.append(expense_table)
         story.append(Spacer(1, 12))
     
+    # Доходы по источникам
     if stats['income_by_source']:
-        story.append(Paragraph("Доходы по источникам", styles['Heading2']))
+        story.append(Paragraph("Доходы по источникам", heading_style))
         income_rows = [
             [source, f"{format_currency(amount)} руб."]
             for source, amount in sorted(stats['income_by_source'].items(), key=lambda x: x[1], reverse=True)
@@ -194,7 +255,8 @@ def export_to_pdf(db: Database, user_id: int, days: int) -> str:
         income_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold')
+            ('FONTNAME', (0, 0), (-1, -1), font_name),
+            ('FONTNAME', (0, 0), (-1, 0), font_bold)
         ]))
         story.append(income_table)
         story.append(Spacer(1, 12))
@@ -202,7 +264,7 @@ def export_to_pdf(db: Database, user_id: int, days: int) -> str:
     def build_operations_section(title_text: str, items: list, columns: list):
         if not items:
             return
-        story.append(Paragraph(title_text, styles['Heading2']))
+        story.append(Paragraph(title_text, heading_style))
         header = ["Дата", columns[0], "Сумма", "Описание"]
         rows = []
         for record in sorted(items, key=lambda x: x.get('date') or '', reverse=True)[:20]:
@@ -218,7 +280,8 @@ def export_to_pdf(db: Database, user_id: int, days: int) -> str:
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 0), (-1, -1), font_name),
+            ('FONTNAME', (0, 0), (-1, 0), font_bold),
             ('FONTSIZE', (0, 0), (-1, -1), 9)
         ]))
         story.append(table)
