@@ -17,7 +17,6 @@ from config import (
 
 db = Database()
 
-# Константы для пагинации
 ITEMS_PER_PAGE = 5
 
 

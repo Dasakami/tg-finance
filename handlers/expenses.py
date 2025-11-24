@@ -17,7 +17,6 @@ from config import (
 
 db = Database()
 
-# Константы для пагинации
 ITEMS_PER_PAGE = 5
 
 
@@ -133,8 +132,7 @@ async def add_expense_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{f'📝 Описание: {description}\n' if description else ''}"
         f"📅 Дата: {format_date(date_value.isoformat())}"
     )
-    
-    # Проверка бюджета
+
     try:
         from budgets import budget_manager
         alert = budget_manager.check_budget_alerts(user_id, category)
@@ -176,7 +174,6 @@ def create_expense_delete_keyboard(expenses, page=0):
         label = f"{format_currency(exp['amount'])} · {exp['category']} · {date_value}"
         buttons.append([InlineKeyboardButton(label, callback_data=f"del_exp_{exp['id']}")])
     
-    # Навигационные кнопки
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton("⬅️ Назад", callback_data=f"exp_page_{page-1}"))
@@ -186,8 +183,6 @@ def create_expense_delete_keyboard(expenses, page=0):
     
     if nav_buttons:
         buttons.append(nav_buttons)
-    
-    # Информация о странице
     if total_pages > 1:
         buttons.append([InlineKeyboardButton(
             f"Страница {page + 1} из {total_pages}",
@@ -205,7 +200,6 @@ async def show_delete_expenses(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("Пока нет расходов для удаления.")
         return
     
-    # Сохраняем список расходов в контексте для пагинации
     context.user_data['delete_expenses_list'] = expenses
     context.user_data['delete_expenses_page'] = 0
     
@@ -246,7 +240,6 @@ async def handle_delete_expense(update: Update, context: ContextTypes.DEFAULT_TY
     
     if db.delete_expense(user_id, expense_id):
         await update.callback_query.edit_message_text("✅ Расход удален.")
-        # Очищаем данные пагинации
         context.user_data.pop('delete_expenses_list', None)
         context.user_data.pop('delete_expenses_page', None)
     else:

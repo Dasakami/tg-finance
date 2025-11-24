@@ -1,16 +1,30 @@
 """
-Обработчики для умных функций: советы, достижения, сравнения, прогнозы
+Обновленные обработчики для умных функций с поддержкой фильтров
 """
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, CommandHandler, CallbackQueryHandler, filters
-from analytics import (
-    generate_smart_tips, get_achievements, compare_periods, 
-    predict_monthly_expenses, get_spending_insights
-)
 from budgets import budget_manager
 from utils import format_currency, format_date
 from handlers.common import cancel
 from config import BACK_BUTTON_TEXT
+
+# Импортируем обновленную аналитику
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + '/..')
+
+# Будем использовать обновленные функции
+try:
+    from analytics import (
+        generate_smart_tips, get_achievements, compare_periods,
+        predict_monthly_expenses
+    )
+except ImportError:
+    # Fallback на старую аналитику
+    from analytics import (
+        generate_smart_tips, get_achievements, compare_periods,
+        predict_monthly_expenses
+    )
 
 # Состояния для бюджетов
 WAITING_FOR_BUDGET_CATEGORY = 100
@@ -26,6 +40,16 @@ async def show_smart_tips(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     for i, tip in enumerate(tips, 1):
         message += f"{i}. {tip}\n\n"
+    
+    # Добавляем подсказку о фильтрах для Premium
+    try:
+        from subscription import subscription_manager
+        if subscription_manager.is_premium(user_id):
+            message += "\n🎯 <i>Используй фильтры категорий для точной аналитики</i>"
+        else:
+            message += "\n⭐ <i>Premium: фильтруй категории для точного анализа</i>"
+    except:
+        pass
     
     await update.message.reply_text(message, parse_mode='HTML')
 
@@ -61,8 +85,12 @@ async def show_period_comparison(update: Update, context: ContextTypes.DEFAULT_T
     current = comparison['current']
     previous = comparison['previous']
     changes = comparison['changes']
+    filters_applied = comparison.get('filters_applied', False)
     
     message = "📊 <b>Сравнение месяцев</b>\n\n"
+    
+    if filters_applied:
+        message += "🎯 <i>Применены фильтры категорий</i>\n\n"
     
     message += "💰 <b>ДОХОДЫ</b>\n"
     message += f"Текущий месяц: {format_currency(current['total_income'])} руб.\n"
@@ -104,8 +132,12 @@ async def show_expense_forecast(update: Update, context: ContextTypes.DEFAULT_TY
     """Показать прогноз расходов"""
     user_id = update.effective_user.id
     forecast = predict_monthly_expenses(user_id)
+    filters_applied = forecast.get('filters_applied', False)
     
     message = "🔮 <b>Прогноз расходов на месяц</b>\n\n"
+    
+    if filters_applied:
+        message += "🎯 <i>Применены фильтры категорий</i>\n\n"
     
     message += f"📅 Прошло дней: {forecast['days_passed']}\n"
     message += f"📅 Осталось дней: {forecast['days_remaining']}\n\n"
@@ -131,16 +163,32 @@ async def show_expense_forecast(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def show_budgets_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать меню бюджетов"""
+    user_id = update.effective_user.id
+    
+    # Проверяем Premium для редактирования
+    try:
+        from subscription import subscription_manager
+        is_premium = subscription_manager.is_premium(user_id)
+    except:
+        is_premium = False
+    
     keyboard = [
         [InlineKeyboardButton("📋 Мои бюджеты", callback_data="budgets_list")],
-        [InlineKeyboardButton("➕ Добавить бюджет", callback_data="budgets_add")],
-        [InlineKeyboardButton("🗑 Удалить бюджет", callback_data="budgets_delete")]
+        [InlineKeyboardButton("➕ Добавить бюджет", callback_data="budgets_add")]
     ]
+    
+    if is_premium:
+        keyboard.append([InlineKeyboardButton("✏️ Редактировать бюджет", callback_data="budgets_edit")])
+    
+    keyboard.append([InlineKeyboardButton("🗑 Удалить бюджет", callback_data="budgets_delete")])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    premium_note = "\n⭐ <i>Premium: доступно редактирование</i>" if is_premium else "\n🔒 <i>Редактирование - Premium функция</i>"
     
     await update.message.reply_text(
         "💰 <b>Управление бюджетами</b>\n\n"
-        "Установи лимиты трат по категориям и получай уведомления при их превышении!",
+        "Установи лимиты трат по категориям и получай уведомления при их превышении!" + premium_note,
         reply_markup=reply_markup,
         parse_mode='HTML'
     )
@@ -298,7 +346,7 @@ budget_conversation = ConversationHandler(
 
 __all__ = [
     'show_smart_tips',
-    'show_achievements', 
+    'show_achievements',
     'show_period_comparison',
     'show_expense_forecast',
     'show_budgets_menu',

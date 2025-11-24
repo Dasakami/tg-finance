@@ -28,7 +28,6 @@ BULK_ADD_HINT = (
     "Если дата не указана — возьмем текущую."
 )
 
-# Константы для пагинации
 ITEMS_PER_PAGE = 10
 
 
@@ -147,7 +146,6 @@ def create_bulk_delete_keyboard(items, page, record_type):
         label = f"ID {item['id']}: {format_currency(item['amount'])} руб., {descriptor} ({date_str})"
         buttons.append([InlineKeyboardButton(label, callback_data=f"bulk_ignore_{item['id']}")])
     
-    # Навигационные кнопки
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton("⬅️ Назад", callback_data=f"bulk_page_{page-1}"))
@@ -157,8 +155,7 @@ def create_bulk_delete_keyboard(items, page, record_type):
     
     if nav_buttons:
         buttons.append(nav_buttons)
-    
-    # Информация о странице
+
     if total_pages > 1:
         buttons.append([InlineKeyboardButton(
             f"Страница {page + 1} из {total_pages}",

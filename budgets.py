@@ -1,6 +1,3 @@
-"""
-Модуль управления бюджетами и лимитами
-"""
 import sqlite3
 from datetime import datetime
 from typing import Dict, List, Optional
