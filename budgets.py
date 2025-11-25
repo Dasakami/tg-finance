@@ -1,4 +1,4 @@
-import sqlite3
+from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from typing import Dict, List, Optional
 from database import Database
@@ -7,90 +7,73 @@ db = Database()
 
 
 class BudgetManager:
-    def __init__(self):
-        self.init_budgets_table()
-    
-    def init_budgets_table(self):
-        """Инициализация таблицы бюджетов"""
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS budgets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                category TEXT NOT NULL,
-                limit_amount REAL NOT NULL,
-                period TEXT DEFAULT 'monthly',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id, category, period),
-                FOREIGN KEY (user_id) REFERENCES users (user_id)
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
-    
     def set_budget(self, user_id: int, category: str, amount: float, period: str = 'monthly') -> bool:
         """Установить бюджет для категории"""
         conn = db.get_connection()
-        cursor = conn.cursor()
-        
         try:
+            cursor = conn.cursor()
+            
             cursor.execute('''
                 INSERT INTO budgets (user_id, category, limit_amount, period)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(user_id, category, period) 
-                DO UPDATE SET limit_amount = ?, created_at = CURRENT_TIMESTAMP
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id, category, period) 
+                DO UPDATE SET limit_amount = %s, created_at = CURRENT_TIMESTAMP
             ''', (user_id, category, amount, period, amount))
             
             conn.commit()
             return True
         except Exception as e:
+            conn.rollback()
             print(f"Error setting budget: {e}")
             return False
         finally:
-            conn.close()
+            cursor.close()
+            db.return_connection(conn)
     
     def get_budgets(self, user_id: int) -> List[Dict]:
         """Получить все бюджеты пользователя"""
         conn = db.get_connection()
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT * FROM budgets
-            WHERE user_id = ?
-            ORDER BY category
-        ''', (user_id,))
-        
-        budgets = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        
-        # Добавляем информацию о текущих тратах
-        stats = db.get_statistics(user_id, 30)
-        for budget in budgets:
-            spent = stats['expenses_by_category'].get(budget['category'], 0)
-            budget['spent'] = spent
-            budget['remaining'] = budget['limit_amount'] - spent
-            budget['percent_used'] = (spent / budget['limit_amount'] * 100) if budget['limit_amount'] > 0 else 0
-        
-        return budgets
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            
+            cursor.execute('''
+                SELECT * FROM budgets
+                WHERE user_id = %s
+                ORDER BY category
+            ''', (user_id,))
+            
+            budgets = [dict(row) for row in cursor.fetchall()]
+            
+            # Добавляем информацию о текущих тратах
+            stats = db.get_statistics(user_id, 30)
+            for budget in budgets:
+                spent = stats['expenses_by_category'].get(budget['category'], 0)
+                budget['spent'] = spent
+                budget['remaining'] = budget['limit_amount'] - spent
+                budget['percent_used'] = (spent / budget['limit_amount'] * 100) if budget['limit_amount'] > 0 else 0
+            
+            return budgets
+        finally:
+            cursor.close()
+            db.return_connection(conn)
     
     def delete_budget(self, user_id: int, category: str) -> bool:
         """Удалить бюджет"""
         conn = db.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            DELETE FROM budgets
-            WHERE user_id = ? AND category = ?
-        ''', (user_id, category))
-        
-        conn.commit()
-        deleted = cursor.rowcount > 0
-        conn.close()
-        return deleted
+        try:
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                DELETE FROM budgets
+                WHERE user_id = %s AND category = %s
+            ''', (user_id, category))
+            
+            conn.commit()
+            deleted = cursor.rowcount > 0
+            return deleted
+        finally:
+            cursor.close()
+            db.return_connection(conn)
     
     def check_budget_alerts(self, user_id: int, category: str) -> Optional[Dict]:
         """Проверить, не превышен ли бюджет"""
