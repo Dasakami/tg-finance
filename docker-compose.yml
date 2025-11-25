@@ -32,7 +32,7 @@ services:
       BOT_TOKEN: ${BOT_TOKEN}
       DB_NAME: ${DB_NAME:-finance_bot}
       DB_USER: ${DB_USER:-finance_user}
-      DB_PASSWORD: ${DB_PASSWORD:-change_me_in_production}
+      DB_PASSWORD: ${DB_PASSWORD:-h72ivh-19}
       DB_HOST: postgres
       DB_PORT: 5432
       PYTHONUNBUFFERED: 1
