@@ -20,9 +20,9 @@ class Database:
         try:
             self.connection_pool = psycopg2.pool.SimpleConnectionPool(
                 1, 20,
-                dbname=os.getenv("DB_NAME", "finance_bot"),
-                user=os.getenv("DB_USER", "finance_user"),
-                password=os.getenv("DB_PASSWORD", "change_me_in_production"),
+                dbname=os.getenv("DB_NAME", "tg_finance"),
+                user=os.getenv("DB_USER", "postgres"),
+                password=os.getenv("DB_PASSWORD", "1908"),
                 host=os.getenv("DB_HOST", "localhost"),
                 port=os.getenv("DB_PORT", "5432")
             )

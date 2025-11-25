@@ -1,9 +1,10 @@
-import sqlite3
+from psycopg2.extras import RealDictCursor
 from typing import Dict, List
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import Database
 from utils import format_currency
+from datetime import datetime, timedelta
 
 db = Database()
 
@@ -12,176 +13,144 @@ class GroupFinance:
     """Класс для управления групповыми финансами"""
     
     def __init__(self):
-        self.init_group_tables()
-    
-    def init_group_tables(self):
-        """Инициализация таблиц для групп"""
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS group_expenses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                group_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                user_name TEXT,
-                amount REAL NOT NULL,
-                category TEXT NOT NULL,
-                description TEXT,
-                date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS group_settings (
-                group_id INTEGER PRIMARY KEY,
-                is_enabled INTEGER DEFAULT 1,
-                allow_all_members INTEGER DEFAULT 1,
-                show_stats INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS group_debts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                group_id INTEGER NOT NULL,
-                debtor_id INTEGER NOT NULL,
-                debtor_name TEXT,
-                creditor_id INTEGER NOT NULL,
-                creditor_name TEXT,
-                amount REAL NOT NULL,
-                description TEXT,
-                is_settled INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
+        # Таблицы уже создаются в database.py
+        pass
     
     def add_group_expense(self, group_id: int, user_id: int, user_name: str,
                          amount: float, category: str, description: str = None) -> bool:
         """Добавить групповой расход"""
         conn = db.get_connection()
-        cursor = conn.cursor()
-        
         try:
+            cursor = conn.cursor()
+            
             cursor.execute('''
                 INSERT INTO group_expenses (group_id, user_id, user_name, amount, category, description)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s)
             ''', (group_id, user_id, user_name, amount, category, description))
+            
             conn.commit()
             return True
         except Exception as e:
+            conn.rollback()
             print(f"Error adding group expense: {e}")
             return False
         finally:
-            conn.close()
+            cursor.close()
+            db.return_connection(conn)
     
     def get_group_statistics(self, group_id: int, days: int = 30) -> Dict:
         """Получить статистику группы"""
-        from datetime import datetime, timedelta
-        
         conn = db.get_connection()
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        date_from = datetime.now() - timedelta(days=days)
-        
-        cursor.execute('''
-            SELECT * FROM group_expenses
-            WHERE group_id = ? AND date >= ?
-            ORDER BY date DESC
-        ''', (group_id, date_from))
-        
-        expenses = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        
-        total = sum(e['amount'] for e in expenses)
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            
+            date_from = datetime.now() - timedelta(days=days)
+            
+            cursor.execute('''
+                SELECT * FROM group_expenses
+                WHERE group_id = %s AND date >= %s
+                ORDER BY date DESC
+            ''', (group_id, date_from))
+            
+            expenses = [dict(row) for row in cursor.fetchall()]
+            
+            total = sum(e['amount'] for e in expenses)
 
-        by_user = {}
-        for exp in expenses:
-            user = exp['user_name'] or f"User {exp['user_id']}"
-            by_user[user] = by_user.get(user, 0) + exp['amount']
-        
-        by_category = {}
-        for exp in expenses:
-            cat = exp['category']
-            by_category[cat] = by_category.get(cat, 0) + exp['amount']
-        
-        return {
-            'total': total,
-            'count': len(expenses),
-            'by_user': by_user,
-            'by_category': by_category,
-            'expenses': expenses
-        }
+            by_user = {}
+            for exp in expenses:
+                user = exp['user_name'] or f"User {exp['user_id']}"
+                by_user[user] = by_user.get(user, 0) + exp['amount']
+            
+            by_category = {}
+            for exp in expenses:
+                cat = exp['category']
+                by_category[cat] = by_category.get(cat, 0) + exp['amount']
+            
+            return {
+                'total': total,
+                'count': len(expenses),
+                'by_user': by_user,
+                'by_category': by_category,
+                'expenses': expenses
+            }
+        finally:
+            cursor.close()
+            db.return_connection(conn)
     
     def add_debt(self, group_id: int, debtor_id: int, debtor_name: str,
                 creditor_id: int, creditor_name: str, amount: float, 
                 description: str = None) -> bool:
         """Добавить долг"""
         conn = db.get_connection()
-        cursor = conn.cursor()
-        
         try:
+            cursor = conn.cursor()
+            
             cursor.execute('''
                 INSERT INTO group_debts 
                 (group_id, debtor_id, debtor_name, creditor_id, creditor_name, amount, description)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             ''', (group_id, debtor_id, debtor_name, creditor_id, creditor_name, amount, description))
+            
             conn.commit()
             return True
         except Exception as e:
+            conn.rollback()
             print(f"Error adding debt: {e}")
             return False
         finally:
-            conn.close()
+            cursor.close()
+            db.return_connection(conn)
     
     def get_user_debts(self, group_id: int, user_id: int) -> Dict:
         """Получить долги пользователя"""
         conn = db.get_connection()
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT * FROM group_debts
-            WHERE group_id = ? AND debtor_id = ? AND is_settled = 0
-        ''', (group_id, user_id))
-        owes = [dict(row) for row in cursor.fetchall()]
-        
-        cursor.execute('''
-            SELECT * FROM group_debts
-            WHERE group_id = ? AND creditor_id = ? AND is_settled = 0
-        ''', (group_id, user_id))
-        owed = [dict(row) for row in cursor.fetchall()]
-        
-        conn.close()
-        
-        total_owes = sum(d['amount'] for d in owes)
-        total_owed = sum(d['amount'] for d in owed)
-        
-        return {
-            'owes': owes,
-            'owed': owed,
-            'total_owes': total_owes,
-            'total_owed': total_owed,
-            'balance': total_owed - total_owes
-        }
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            
+            cursor.execute('''
+                SELECT * FROM group_debts
+                WHERE group_id = %s AND debtor_id = %s AND is_settled = 0
+            ''', (group_id, user_id))
+            owes = [dict(row) for row in cursor.fetchall()]
+            
+            cursor.execute('''
+                SELECT * FROM group_debts
+                WHERE group_id = %s AND creditor_id = %s AND is_settled = 0
+            ''', (group_id, user_id))
+            owed = [dict(row) for row in cursor.fetchall()]
+            
+            total_owes = sum(d['amount'] for d in owes)
+            total_owed = sum(d['amount'] for d in owed)
+            
+            return {
+                'owes': owes,
+                'owed': owed,
+                'total_owes': total_owes,
+                'total_owed': total_owed,
+                'balance': total_owed - total_owes
+            }
+        finally:
+            cursor.close()
+            db.return_connection(conn)
     
     def settle_debt(self, debt_id: int) -> bool:
         """Погасить долг"""
         conn = db.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE group_debts
-            SET is_settled = 1
-            WHERE id = ?
-        ''', (debt_id,))
-        
-        conn.commit()
-        settled = cursor.rowcount > 0
-        conn.close()
-        return settled
+        try:
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                UPDATE group_debts
+                SET is_settled = 1
+                WHERE id = %s
+            ''', (debt_id,))
+            
+            conn.commit()
+            settled = cursor.rowcount > 0
+            return settled
+        finally:
+            cursor.close()
+            db.return_connection(conn)
 
 
 group_finance = GroupFinance()
