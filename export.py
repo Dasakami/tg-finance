@@ -16,6 +16,24 @@ from database import Database
 from utils import format_currency, format_date
 
 
+def _normalize_date(date_value):
+    """Нормализация даты для обработки"""
+    if date_value is None:
+        return "Без даты"
+    
+    if isinstance(date_value, datetime):
+        return date_value.strftime('%d.%m.%Y %H:%M')
+    
+    if isinstance(date_value, str):
+        try:
+            dt = datetime.fromisoformat(date_value.replace('Z', '+00:00'))
+            return dt.strftime('%d.%m.%Y %H:%M')
+        except:
+            return date_value
+    
+    return str(date_value)
+
+
 def export_to_excel(db: Database, user_id: int, days: int = None) -> str:
     """
     Экспорт данных в Excel
@@ -96,12 +114,12 @@ def export_to_excel(db: Database, user_id: int, days: int = None) -> str:
         ws[f'{col}{row}'].fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
     row += 1
     
-    for exp in sorted(stats['expenses'], key=lambda x: x['date'], reverse=True):
-        date_str = datetime.fromisoformat(exp['date'].replace('Z', '+00:00')).strftime('%d.%m.%Y %H:%M')
+    for exp in sorted(stats['expenses'], key=lambda x: x.get('date') or datetime.min, reverse=True):
+        date_str = _normalize_date(exp.get('date'))
         ws[f'A{row}'] = date_str
         ws[f'B{row}'] = exp['category']
         ws[f'C{row}'] = exp['amount']
-        ws[f'D{row}'] = exp['description'] or ''
+        ws[f'D{row}'] = exp.get('description') or ''
         row += 1
     
     row += 1
@@ -118,12 +136,12 @@ def export_to_excel(db: Database, user_id: int, days: int = None) -> str:
         ws[f'{col}{row}'].fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
     row += 1
     
-    for inc in sorted(stats['income'], key=lambda x: x['date'], reverse=True):
-        date_str = datetime.fromisoformat(inc['date'].replace('Z', '+00:00')).strftime('%d.%m.%Y %H:%M')
+    for inc in sorted(stats['income'], key=lambda x: x.get('date') or datetime.min, reverse=True):
+        date_str = _normalize_date(inc.get('date'))
         ws[f'A{row}'] = date_str
         ws[f'B{row}'] = inc['source']
         ws[f'C{row}'] = inc['amount']
-        ws[f'D{row}'] = inc['description'] or ''
+        ws[f'D{row}'] = inc.get('description') or ''
         row += 1
     
     for column in ws.columns:
@@ -267,9 +285,9 @@ def export_to_pdf(db: Database, user_id: int, days: int = None) -> str:
         story.append(Paragraph(title_text, heading_style))
         header = ["Дата", columns[0], "Сумма", "Описание"]
         rows = []
-        for record in sorted(items, key=lambda x: x.get('date') or '', reverse=True)[:20]:
+        for record in sorted(items, key=lambda x: x.get('date') or datetime.min, reverse=True)[:20]:
             raw_date = record.get('date')
-            date_str = format_date(raw_date) if raw_date else "Без даты"
+            date_str = _normalize_date(raw_date)
             rows.append([
                 date_str,
                 record[columns[1]],

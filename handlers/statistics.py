@@ -75,13 +75,19 @@ async def show_last_3_days(update: Update, context: ContextTypes.DEFAULT_TYPE):
     income_by_day = {}
     
     for exp in stats['expenses']:
-        date = datetime.fromisoformat(exp['date'].replace('Z', '+00:00')).date()
+        date_obj = exp['date']
+        if isinstance(date_obj, str):
+            date_obj = datetime.fromisoformat(date_obj.replace('Z', '+00:00'))
+        date = date_obj.date()
         if date not in expenses_by_day:
             expenses_by_day[date] = []
         expenses_by_day[date].append(exp)
     
     for inc in stats['income']:
-        date = datetime.fromisoformat(inc['date'].replace('Z', '+00:00')).date()
+        date_obj = inc['date']
+        if isinstance(date_obj, str):
+            date_obj = datetime.fromisoformat(date_obj.replace('Z', '+00:00'))
+        date = date_obj.date()
         if date not in income_by_day:
             income_by_day[date] = []
         income_by_day[date].append(inc)
@@ -133,26 +139,50 @@ async def show_export_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    days_str = update.callback_query.data.replace("exp_", "")
-    days = None if days_str == "all" else int(days_str)
-    user_id = update.effective_user.id
     
-    period_text = f"{days} дней" if days else "все время"
+    # Исправление: правильно парсим callback_data
+    callback_data = update.callback_query.data
+    days_str = callback_data.replace("exp_", "")
+    
+    # Преобразуем в int или None
+    if days_str == "all":
+        days = None
+        period_text = "все время"
+    else:
+        try:
+            days = int(days_str)
+            period_text = f"{days} дней"
+        except ValueError:
+            await update.callback_query.message.reply_text("❌ Ошибка: неверный формат периода")
+            return
+    
+    user_id = update.effective_user.id
     
     try:
         file_path = export_to_excel(db, user_id, days)
+        
         if file_path and os.path.exists(file_path):
-            await update.callback_query.message.reply_document(
-                document=open(file_path, 'rb'),
-                filename=f"finance_export_{period_text.replace(' ', '_')}.xlsx",
-                caption=f"📤 Экспорт данных за {period_text}"
-            )
-            os.remove(file_path)
+            with open(file_path, 'rb') as file:
+                await update.callback_query.message.reply_document(
+                    document=file,
+                    filename=f"finance_export_{period_text.replace(' ', '_')}.xlsx",
+                    caption=f"📤 Экспорт данных за {period_text}"
+                )
+            
+            # Удаляем файл после отправки
+            try:
+                os.remove(file_path)
+            except:
+                pass
         else:
             await update.callback_query.message.reply_text("❌ Ошибка при создании файла экспорта.")
+            
     except Exception as e:
-        logger.error(f"Export error: {e}")
-        await update.callback_query.message.reply_text("❌ Произошла ошибка при экспорте данных.")
+        logger.error(f"Export error: {e}", exc_info=True)
+        await update.callback_query.message.reply_text(
+            "❌ Произошла ошибка при экспорте данных.\n"
+            f"Детали: {str(e)}"
+        )
 
 
 async def show_pdf_export_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -176,26 +206,50 @@ async def show_pdf_export_menu(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_pdf_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    days_str = update.callback_query.data.replace("pdf_", "")
-    days = None if days_str == "all" else int(days_str)
-    user_id = update.effective_user.id
     
-    period_text = f"{days} дней" if days else "все время"
+    # Исправление: правильно парсим callback_data
+    callback_data = update.callback_query.data
+    days_str = callback_data.replace("pdf_", "")
+    
+    # Преобразуем в int или None
+    if days_str == "all":
+        days = None
+        period_text = "все время"
+    else:
+        try:
+            days = int(days_str)
+            period_text = f"{days} дней"
+        except ValueError:
+            await update.callback_query.message.reply_text("❌ Ошибка: неверный формат периода")
+            return
+    
+    user_id = update.effective_user.id
     
     try:
         file_path = export_to_pdf(db, user_id, days)
+        
         if file_path and os.path.exists(file_path):
-            await update.callback_query.message.reply_document(
-                document=open(file_path, 'rb'),
-                filename=f"finance_report_{period_text.replace(' ', '_')}.pdf",
-                caption=f"📄 PDF-отчет за {period_text}"
-            )
-            os.remove(file_path)
+            with open(file_path, 'rb') as file:
+                await update.callback_query.message.reply_document(
+                    document=file,
+                    filename=f"finance_report_{period_text.replace(' ', '_')}.pdf",
+                    caption=f"📄 PDF-отчет за {period_text}"
+                )
+            
+            # Удаляем файл после отправки
+            try:
+                os.remove(file_path)
+            except:
+                pass
         else:
             await update.callback_query.message.reply_text("❌ Ошибка при создании PDF.")
+            
     except Exception as e:
-        logger.error(f"PDF export error: {e}")
-        await update.callback_query.message.reply_text("❌ Произошла ошибка при создании PDF.")
+        logger.error(f"PDF export error: {e}", exc_info=True)
+        await update.callback_query.message.reply_text(
+            "❌ Произошла ошибка при создании PDF.\n"
+            f"Детали: {str(e)}"
+        )
 
 
 async def show_chart_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -223,31 +277,51 @@ async def send_statistics_chart(update: Update, context: ContextTypes.DEFAULT_TY
 async def handle_chart_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка генерации диаграммы за выбранный период"""
     await update.callback_query.answer()
-    days_str = update.callback_query.data.replace("chart_", "")
-    days = None if days_str == "all" else int(days_str)
+    
+    # Исправление: правильно парсим callback_data
+    callback_data = update.callback_query.data
+    days_str = callback_data.replace("chart_", "")
+    
+    # Преобразуем в int или None
+    if days_str == "all":
+        days = None
+        period_text = "все время"
+    else:
+        try:
+            days = int(days_str)
+            period_text = f"{days} дней"
+        except ValueError:
+            await update.callback_query.message.reply_text("❌ Ошибка: неверный формат периода")
+            return
+    
     user_id = update.effective_user.id
     
-    period_text = {
-        30: "30 дней",
-        90: "90 дней",
-        None: "все время"
-    }.get(days, f"{days} дней")
-    
-    stats = db.get_statistics(user_id, days)
-    chart_path = create_statistics_chart(stats, period_text)
-    
-    if not chart_path or not os.path.exists(chart_path):
-        await update.callback_query.message.reply_text("Недостаточно данных для построения диаграммы.")
-        return
-    
     try:
-        await update.callback_query.message.reply_photo(
-            photo=open(chart_path, 'rb'),
-            caption=f"📈 Диаграмма расходов/доходов за {period_text}"
-        )
-    finally:
-        if os.path.exists(chart_path):
+        stats = db.get_statistics(user_id, days)
+        chart_path = create_statistics_chart(stats, period_text)
+        
+        if not chart_path or not os.path.exists(chart_path):
+            await update.callback_query.message.reply_text("Недостаточно данных для построения диаграммы.")
+            return
+        
+        with open(chart_path, 'rb') as photo:
+            await update.callback_query.message.reply_photo(
+                photo=photo,
+                caption=f"📈 Диаграмма расходов/доходов за {period_text}"
+            )
+        
+        # Удаляем файл после отправки
+        try:
             os.remove(chart_path)
+        except:
+            pass
+            
+    except Exception as e:
+        logger.error(f"Chart generation error: {e}", exc_info=True)
+        await update.callback_query.message.reply_text(
+            "❌ Произошла ошибка при создании диаграммы.\n"
+            f"Детали: {str(e)}"
+        )
 
 
 __all__ = [
