@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_TOKEN = os.getenv("TOKEN") 
+BOT_TOKEN = os.getenv("BOT_TOKEN") 
 
 (
     WAITING_FOR_AMOUNT,
