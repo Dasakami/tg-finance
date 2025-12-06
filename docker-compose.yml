@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  postgres:
+  finance_bot_db:
     image: postgres:15-alpine
     container_name: finance_bot_db
     restart: unless-stopped
@@ -33,7 +33,7 @@ services:
       DB_NAME: ${DB_NAME:-finance_bot}
       DB_USER: ${DB_USER:-finance_user}
       DB_PASSWORD: ${DB_PASSWORD:-h72ivh-19}
-      DB_HOST: postgres
+      DB_HOST: finance_bot_db
       DB_PORT: 5432
       PYTHONUNBUFFERED: 1
       PYTHONIOENCODING: UTF-8
