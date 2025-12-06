@@ -8,9 +8,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from dotenv import load_dotenv
-
-load_dotenv()
 
 class Database:
     def __init__(self):
@@ -23,11 +20,11 @@ class Database:
         try:
             self.connection_pool = psycopg2.pool.SimpleConnectionPool(
                 1, 20,
-                dbname=os.getenv("DB_NAME"),
-                user=os.getenv("DB_USER"),
-                password=os.getenv("DB_PASSWORD"),
-                host=os.getenv("DB_HOST"),
-                port=os.getenv("DB_PORT")
+                dbname=os.getenv("DB_NAME", "finance_bot"),
+                user=os.getenv("DB_USER", "finance_user"),
+                password=os.getenv("DB_PASSWORD", "h72ivh-19"),
+                host=os.getenv("DB_HOST", "postgres"),
+                port=os.getenv("DB_PORT", "5432")
             )
             logger.info("Connection pool created successfully")
         except Exception as e:
