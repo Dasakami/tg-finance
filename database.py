@@ -23,7 +23,7 @@ class Database:
                 dbname=os.getenv("DB_NAME", "finance_bot"),
                 user=os.getenv("DB_USER", "finance_user"),
                 password=os.getenv("DB_PASSWORD", "h72ivh-19"),
-                host=os.getenv("DB_HOST", "postgres"),
+                host=os.getenv("DB_HOST", "finance_bot_db"),
                 port=os.getenv("DB_PORT", "5432")
             )
             logger.info("Connection pool created successfully")

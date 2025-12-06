@@ -26,6 +26,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    env_file:
+      - .env
     container_name: finance_bot
     restart: unless-stopped
     environment:
