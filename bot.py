@@ -2,9 +2,10 @@ import logging
 from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
-    PreCheckoutQueryHandler, InlineQueryHandler, ChosenInlineResultHandler, filters
+    PreCheckoutQueryHandler, InlineQueryHandler, ChosenInlineResultHandler, filters, ConversationHandler
 )
 from config import BOT_TOKEN
+from config import WAITING_FOR_BULK_DATA, WAITING_FOR_BULK_TYPE
 from handlers.common import start, cancel
 from handlers.expenses import (
     expense_handler, delete_expense_handler, 
@@ -44,6 +45,11 @@ from handlers.group_functions import (
     group_my_debts, group_settle_debt, group_help
 )
 
+from handlers.hidden_money import (
+    add_hidden_money_start, add_hidden_money_amount,
+    add_hidden_money_reason
+)
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -72,7 +78,16 @@ def main():
     application.add_handler(CommandHandler("group_my_debts", group_my_debts))
     application.add_handler(CommandHandler("group_settle", group_settle_debt))
     application.add_handler(CommandHandler("group_help", group_help))
-    
+
+    application.add_handler(MessageHandler(filters.Regex("^💰 Скрытые деньги$"), add_hidden_money_start))
+    application.add_handler(ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^💰 Скрытые деньги$"), add_hidden_money_start)],
+        states={
+            WAITING_FOR_BULK_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_hidden_money_amount)],
+            WAITING_FOR_BULK_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_hidden_money_reason)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    ))
     application.add_handler(MessageHandler(filters.Regex("^⭐ Premium"), show_premium_info))
     application.add_handler(CallbackQueryHandler(show_premium_info, pattern="^show_premium$"))
     application.add_handler(CallbackQueryHandler(buy_premium, pattern="^buy_premium$"))

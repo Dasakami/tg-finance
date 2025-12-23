@@ -73,6 +73,14 @@ class Database:
                 )
             """)
 
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS hidden_money (
+                           id SERIAL PRIMARY KEY,
+                           user_id BIGINT NOT NULL,
+                           amount REAL NOT NULL,
+                           reason TEXT) 
+                           """)
+
             # Таблица доходов
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS income (
@@ -351,6 +359,7 @@ class Database:
         finally:
             cursor.close()
             self.return_connection(conn)
+    
 
     def get_expenses(self, user_id: int, days: int = None) -> List[Dict]:
         """Получить расходы"""
