@@ -6,6 +6,7 @@ from telegram.ext import (
 )
 from config import BOT_TOKEN
 from config import WAITING_FOR_BULK_DATA, WAITING_FOR_BULK_TYPE
+
 from handlers.common import start, cancel
 from handlers.expenses import (
     expense_handler, delete_expense_handler, 
@@ -45,9 +46,25 @@ from handlers.group_functions import (
     group_my_debts, group_settle_debt, group_help
 )
 
-from handlers.hidden_money import (
-    add_hidden_money_start, add_hidden_money_amount,
-    add_hidden_money_reason
+from handlers.balance_handlers import (
+    show_balance, show_hidden_history, recalculate_balance,
+    hidden_balance_conversation
+)
+from handlers.category_handlers import (
+    show_category_menu, list_categories, delete_category_menu,
+    delete_category_confirm, view_expenses_by_category,
+    category_selected_for_view, show_category_details,
+    add_category_conversation
+)
+from handlers.notification_handlers import (
+    show_notification_settings, toggle_notification_setting,
+    show_regular_expenses, add_regular_expense_start,
+    regular_expense_conversation, disable_regular_expense
+)
+from handlers.enhanced_statistics import (
+    show_last_7_days, show_7_days_statistics,
+    show_income_chart_menu, income_chart_period_selected,
+    show_category_comparison
 )
 
 logging.basicConfig(
@@ -56,6 +73,7 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
 
 def main():
     if not BOT_TOKEN:
@@ -67,27 +85,17 @@ def main():
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", start))
-    
+
     application.add_handler(InlineQueryHandler(inline_query_handler))
     application.add_handler(ChosenInlineResultHandler(chosen_inline_result))
     application.add_handler(CallbackQueryHandler(inline_stats_callback, pattern="^inline_stats$"))
-    
+
     application.add_handler(CommandHandler("group_expense", group_add_expense))
     application.add_handler(CommandHandler("group_stats", group_statistics))
     application.add_handler(CommandHandler("group_debt", group_add_debt))
     application.add_handler(CommandHandler("group_my_debts", group_my_debts))
     application.add_handler(CommandHandler("group_settle", group_settle_debt))
     application.add_handler(CommandHandler("group_help", group_help))
-
-    application.add_handler(MessageHandler(filters.Regex("^💰 Скрытые деньги$"), add_hidden_money_start))
-    application.add_handler(ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^💰 Скрытые деньги$"), add_hidden_money_start)],
-        states={
-            WAITING_FOR_BULK_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_hidden_money_amount)],
-            WAITING_FOR_BULK_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_hidden_money_reason)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-    ))
     application.add_handler(MessageHandler(filters.Regex("^⭐ Premium"), show_premium_info))
     application.add_handler(CallbackQueryHandler(show_premium_info, pattern="^show_premium$"))
     application.add_handler(CallbackQueryHandler(buy_premium, pattern="^buy_premium$"))
@@ -101,27 +109,47 @@ def main():
     application.add_handler(CallbackQueryHandler(remove_filter_confirm, pattern="^rmfilter_"))
     application.add_handler(CallbackQueryHandler(clear_all_filters, pattern="^clear_filters$"))
     
+    application.add_handler(MessageHandler(filters.Regex("^💰 Баланс$"), show_balance))
+    application.add_handler(CallbackQueryHandler(show_hidden_history, pattern="^hidden_history$"))
+    application.add_handler(CallbackQueryHandler(recalculate_balance, pattern="^balance_recalc$"))
+    application.add_handler(hidden_balance_conversation)
+    application.add_handler(MessageHandler(filters.Regex("^📂 Категории$"), show_category_menu))
+    application.add_handler(add_category_conversation)
+    application.add_handler(CallbackQueryHandler(list_categories, pattern="^cat_list_"))
+    application.add_handler(CallbackQueryHandler(delete_category_menu, pattern="^cat_delete_menu$"))
+    application.add_handler(CallbackQueryHandler(delete_category_confirm, pattern="^del_cat_"))
+    application.add_handler(MessageHandler(filters.Regex("^📊 Траты по категориям$"), view_expenses_by_category))
+    application.add_handler(CallbackQueryHandler(category_selected_for_view, pattern="^view_cat_"))
+    application.add_handler(CallbackQueryHandler(show_category_details, pattern="^cat_period_"))
+    
+    application.add_handler(MessageHandler(filters.Regex("^🔔 Уведомления$"), show_notification_settings))
+    application.add_handler(CallbackQueryHandler(toggle_notification_setting, pattern="^notif_toggle_"))
+    application.add_handler(MessageHandler(filters.Regex("^⏰ Регулярные траты$"), show_regular_expenses))
+    application.add_handler(regular_expense_conversation)
+    application.add_handler(CallbackQueryHandler(disable_regular_expense, pattern="^disable_regular_"))
+    
+    application.add_handler(MessageHandler(filters.Regex("^📝 Последние 7 дней$"), show_last_7_days))
+    application.add_handler(MessageHandler(filters.Regex("^📊 Статистика 7 дней$"), show_7_days_statistics))
+    application.add_handler(MessageHandler(filters.Regex("^📈 Диаграмма доходов$"), show_income_chart_menu))
+    application.add_handler(CallbackQueryHandler(income_chart_period_selected, pattern="^income_chart_"))
+    application.add_handler(MessageHandler(filters.Regex("^📊 Сравнение категорий$"), show_category_comparison))
+
     application.add_handler(expense_handler)
     application.add_handler(income_handler)
-
     application.add_handler(delete_expense_handler)
     application.add_handler(expense_page_callback)
     application.add_handler(delete_expense_callback)
-    
     application.add_handler(delete_income_handler)
     application.add_handler(income_page_callback)
     application.add_handler(delete_income_callback)
     
     application.add_handler(bulk_add_handler)
     application.add_handler(bulk_delete_handler)
-
     application.add_handler(search_handler)
-
     application.add_handler(MessageHandler(filters.Regex("^💡 Умные советы$"), show_smart_tips))
     application.add_handler(MessageHandler(filters.Regex("^🏆 Достижения$"), show_achievements))
     application.add_handler(MessageHandler(filters.Regex("^📊 Сравнить месяцы$"), show_period_comparison))
     application.add_handler(MessageHandler(filters.Regex("^🔮 Прогноз$"), show_expense_forecast))
-    
     application.add_handler(MessageHandler(filters.Regex("^💰 Бюджеты$"), show_budgets_menu))
     application.add_handler(budget_conversation)
     application.add_handler(edit_budget_conversation)
@@ -134,7 +162,6 @@ def main():
     application.add_handler(MessageHandler(filters.Regex("^📝 Последние 3 дня$"), show_last_3_days))
     application.add_handler(MessageHandler(filters.Regex("^📤 Экспорт$"), show_export_menu))
     application.add_handler(MessageHandler(filters.Regex("^📄 Экспорт PDF$"), show_pdf_export_menu))
-    
     application.add_handler(CallbackQueryHandler(show_statistics, pattern="^stat_"))
     application.add_handler(CallbackQueryHandler(handle_export, pattern="^exp_"))
     application.add_handler(CallbackQueryHandler(handle_pdf_export, pattern="^pdf_"))
@@ -145,38 +172,10 @@ def main():
     application.add_handler(chart_filters_conversation)
     application.add_handler(CallbackQueryHandler(chart_filtered_type_selected, pattern="^chart_filtered_"))
     
-    print("=" * 60)
+    print("=" * 80)
     print("✅ Бот успешно запущен!")
-    print("=" * 60)
-    print("🎯 Активные функции:")
-    print("  ✓ Учет расходов и доходов")
-    print("  ✓ Статистика и диаграммы (3 типа)")
-    print("  ✓ Экспорт в Excel и PDF")
-    print("  ✓ Умные советы и аналитика")
-    print("=" * 60)
-    print("⭐ Premium функции:")
-    print("  ✓ Редактирование бюджетов")
-    print("  ✓ Фильтрация категорий")
-    print("  ✓ Диаграммы с фильтрами")
-    print("  💎 Стоимость: 1 Telegram Star = 1 месяц")
-    print("=" * 60)
-    print("🤖 Inline режим:")
-    print("  ✓ @bot расход 500 еда")
-    print("  ✓ @bot доход 5000 зарплата")
-    print("=" * 60)
-    print("👥 Групповые функции:")
-    print("  ✓ /group_expense - добавить групповой расход")
-    print("  ✓ /group_stats - статистика группы")
-    print("  ✓ /group_debt - учет долгов")
-    print("  ✓ /group_my_debts - мои долги")
-    print("=" * 60)
-    print("📊 Типы диаграмм:")
-    print("  • Круговая (с легендой в углу)")
-    print("  • Столбчатая")
-    print("  • Линейная")
-    print("=" * 60)
-    
     application.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == '__main__':
     main()

@@ -47,7 +47,6 @@ def create_pie_chart(data: Dict[str, float], title: str, excluded_categories: Li
     fig, ax = plt.subplots(figsize=(10, 7))
     plt.rcParams['font.family'] = 'DejaVu Sans'
     
-    # Создаем круговую диаграмму БЕЗ подписей
     wedges, texts, autotexts = ax.pie(
         values, 
         autopct='%1.1f%%',
@@ -56,7 +55,6 @@ def create_pie_chart(data: Dict[str, float], title: str, excluded_categories: Li
         textprops={'fontsize': 10, 'weight': 'bold'}
     )
     
-    # Создаем легенду в углу
     legend_labels = [f'{label}: {value:,.0f} руб.' for label, value in zip(labels, values)]
     ax.legend(
         wedges, 
@@ -87,16 +85,13 @@ def create_bar_chart(data: Dict[str, float], title: str, excluded_categories: Li
     fig, ax = plt.subplots(figsize=(12, 7))
     plt.rcParams['font.family'] = 'DejaVu Sans'
     
-    # Создаем столбчатую диаграмму
     bars = ax.bar(range(len(labels)), values, color=colors, edgecolor='black', linewidth=0.5)
     
-    # Настройка осей
     ax.set_xticks(range(len(labels)))
-    ax.set_xticklabels(range(1, len(labels) + 1))  # Нумеруем столбцы
+    ax.set_xticklabels(range(1, len(labels) + 1))  
     ax.set_ylabel('Сумма (руб.)', fontsize=11, weight='bold')
     ax.set_title(title, fontsize=14, weight='bold', pad=20)
     
-    # Добавляем значения на столбцы
     for bar, value in zip(bars, values):
         height = bar.get_height()
         ax.text(
@@ -105,7 +100,6 @@ def create_bar_chart(data: Dict[str, float], title: str, excluded_categories: Li
             ha='center', va='bottom', fontsize=9, weight='bold'
         )
     
-    # Создаем легенду
     legend_patches = [mpatches.Patch(color=color, label=f'{i+1}. {label}') 
                      for i, (label, color) in enumerate(zip(labels, colors))]
     ax.legend(
@@ -115,7 +109,6 @@ def create_bar_chart(data: Dict[str, float], title: str, excluded_categories: Li
         fontsize=9
     )
     
-    # Сетка
     ax.grid(axis='y', linestyle='--', alpha=0.3)
     ax.set_axisbelow(True)
     
@@ -131,7 +124,6 @@ def create_line_chart(expenses_data: Dict[str, float], income_data: Dict[str, fl
                      title: str, excluded_categories: List[str] = None) -> Optional[str]:
     """Линейная диаграмма для сравнения расходов и доходов"""
     
-    # Подготовка данных
     exp_labels, exp_values, exp_colors = _prepare_chart_data(expenses_data, excluded_categories)
     inc_labels, inc_values, inc_colors = _prepare_chart_data(income_data)
     
@@ -145,12 +137,10 @@ def create_line_chart(expenses_data: Dict[str, float], income_data: Dict[str, fl
     x_exp = range(len(exp_labels))
     x_inc = range(len(inc_labels))
     
-    # Линии
     if exp_values and exp_labels[0] != "Нет данных":
         ax.plot(x_exp, exp_values, marker='o', linewidth=2, markersize=8, 
                color='#FF6B6B', label='Расходы', linestyle='-')
         
-        # Подписи значений
         for i, (x, y) in enumerate(zip(x_exp, exp_values)):
             ax.text(x, y, f'{y:,.0f}', fontsize=8, ha='center', va='bottom')
     
@@ -158,18 +148,15 @@ def create_line_chart(expenses_data: Dict[str, float], income_data: Dict[str, fl
         ax.plot(x_inc, inc_values, marker='s', linewidth=2, markersize=8,
                color='#4ECDC4', label='Доходы', linestyle='-')
         
-        # Подписи значений
         for i, (x, y) in enumerate(zip(x_inc, inc_values)):
             ax.text(x, y, f'{y:,.0f}', fontsize=8, ha='center', va='top')
     
-    # Настройка осей
     all_labels = exp_labels if len(exp_labels) >= len(inc_labels) else inc_labels
     ax.set_xticks(range(len(all_labels)))
     ax.set_xticklabels([f'{i+1}' for i in range(len(all_labels))], fontsize=9)
     ax.set_ylabel('Сумма (руб.)', fontsize=11, weight='bold')
     ax.set_title(title, fontsize=14, weight='bold', pad=20)
     
-    # Легенда категорий
     legend_text = "Категории (расходы):\n"
     for i, label in enumerate(exp_labels[:10], 1):
         legend_text += f"{i}. {label}\n"

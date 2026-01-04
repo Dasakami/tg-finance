@@ -1,3 +1,7 @@
+"""
+ОБНОВЛЕНИЕ: Добавлены вызовы balance_manager и category_manager
+Замените handlers/income.py на этот файл
+"""
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -5,6 +9,8 @@ from telegram.ext import (
     CallbackQueryHandler, filters
 )
 from database import Database
+from balance import balance_manager
+from custom_categories import category_manager
 from utils import format_currency, format_date, parse_user_date
 from handlers.common import cancel
 from config import (
@@ -16,7 +22,6 @@ from config import (
 )
 
 db = Database()
-
 ITEMS_PER_PAGE = 5
 
 
@@ -34,7 +39,25 @@ async def add_income_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         context.user_data['income_amount'] = amount
         
-        keyboard = [
+        # НОВОЕ: Получаем пользовательские источники
+        user_id = update.effective_user.id
+        sources = category_manager.get_categories(user_id, 'income')
+        
+        keyboard = []
+        
+        # Добавляем пользовательские источники (первые 4)
+        custom_sources = [s for s in sources if s['is_custom']][:4]
+        for i in range(0, len(custom_sources), 2):
+            row = []
+            for src in custom_sources[i:i+2]:
+                row.append(InlineKeyboardButton(
+                    src['name'],
+                    callback_data=f"src_{src['name'].split(' ', 1)[-1]}"
+                ))
+            keyboard.append(row)
+        
+        # Стандартные источники
+        keyboard.extend([
             [
                 InlineKeyboardButton("💼 Зарплата", callback_data="src_Зарплата"),
                 InlineKeyboardButton("💻 Фриланс", callback_data="src_Фриланс")
@@ -48,7 +71,8 @@ async def add_income_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("💰 Прочее", callback_data="src_Прочее")
             ],
             [InlineKeyboardButton("✏️ Ввести свой", callback_data="src_custom")]
-        ]
+        ])
+        
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(
@@ -71,6 +95,11 @@ async def add_income_source(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             source = update.callback_query.data.replace("src_", "")
             context.user_data['income_source'] = source
+            
+            # НОВОЕ: Увеличиваем счётчик использования
+            user_id = update.callback_query.from_user.id
+            category_manager.increment_use_count(user_id, source, 'income')
+            
             await update.callback_query.edit_message_text(
                 f"Источник: {source}\n\n"
                 "Введи описание (или отправь /skip чтобы пропустить):"
@@ -122,9 +151,13 @@ async def add_income_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return WAITING_FOR_INCOME_DATE
         date_value = parsed_date
     
+    # Добавляем доход в базу
     db.add_income(user_id, amount, source, description, date_value)
     
-    await update.message.reply_text(
+    # НОВОЕ: Обновляем баланс
+    balance_manager.update_balance(user_id, amount, is_income=True)
+    
+    response_text = (
         f"✅ Доход добавлен!\n\n"
         f"💰 Сумма: {format_currency(amount)} руб.\n"
         f"📂 Источник: {source}\n"
@@ -132,10 +165,21 @@ async def add_income_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📅 Дата: {format_date(date_value.isoformat())}"
     )
     
+    # НОВОЕ: Показываем обновлённый баланс
+    balance = balance_manager.get_balance(user_id)
+    response_text += (
+        f"\n\n💵 <b>Баланс:</b> {format_currency(balance['balance'])} руб.\n"
+        f"🔒 Скрытый: {format_currency(balance['hidden_balance'])} руб.\n"
+        f"📊 <b>Всего: {format_currency(balance['total_balance'])} руб.</b>"
+    )
+    
+    await update.message.reply_text(response_text, parse_mode='HTML')
+    
     context.user_data.clear()
     return ConversationHandler.END
 
 
+# Остальной код (удаление доходов) остаётся без изменений
 def create_income_delete_keyboard(incomes, page=0):
     """Создает клавиатуру с пагинацией для удаления доходов"""
     total_items = len(incomes)
@@ -150,7 +194,6 @@ def create_income_delete_keyboard(incomes, page=0):
         label = f"{format_currency(inc['amount'])} · {inc['source']} · {date_value}"
         buttons.append([InlineKeyboardButton(label, callback_data=f"del_inc_{inc['id']}")])
     
-    # Навигационные кнопки
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton("⬅️ Назад", callback_data=f"inc_page_{page-1}"))
@@ -161,7 +204,6 @@ def create_income_delete_keyboard(incomes, page=0):
     if nav_buttons:
         buttons.append(nav_buttons)
     
-    # Информация о странице
     if total_pages > 1:
         buttons.append([InlineKeyboardButton(
             f"Страница {page + 1} из {total_pages}",
@@ -173,13 +215,12 @@ def create_income_delete_keyboard(incomes, page=0):
 
 async def show_delete_income(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    incomes = db.get_last_income(user_id, limit=50)  # Получаем больше записей для пагинации
+    incomes = db.get_last_income(user_id, limit=50)
     
     if not incomes:
         await update.message.reply_text("Пока нет доходов для удаления.")
         return
     
-    # Сохраняем список доходов в контексте для пагинации
     context.user_data['delete_income_list'] = incomes
     context.user_data['delete_income_page'] = 0
     
@@ -191,7 +232,6 @@ async def show_delete_income(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def handle_income_page_navigation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка навигации по страницам доходов"""
     await update.callback_query.answer()
     
     if update.callback_query.data == "inc_page_info":
@@ -218,9 +258,18 @@ async def handle_delete_income(update: Update, context: ContextTypes.DEFAULT_TYP
     income_id = int(update.callback_query.data.replace("del_inc_", ""))
     user_id = update.effective_user.id
     
-    if db.delete_income(user_id, income_id):
-        await update.callback_query.edit_message_text("✅ Доход удален.")
-        # Очищаем данные пагинации
+    # Получаем информацию о доходе перед удалением
+    incomes = db.get_income(user_id, None)
+    income = next((i for i in incomes if i['id'] == income_id), None)
+    
+    if income and db.delete_income(user_id, income_id):
+        # НОВОЕ: Снимаем деньги с баланса при удалении
+        balance_manager.update_balance(user_id, income['amount'], is_income=False)
+        
+        await update.callback_query.edit_message_text(
+            f"✅ Доход удален.\n"
+            f"Снято с баланса: {format_currency(income['amount'])} руб."
+        )
         context.user_data.pop('delete_income_list', None)
         context.user_data.pop('delete_income_page', None)
     else:
@@ -259,9 +308,5 @@ __all__ = [
     'income_handler',
     'delete_income_handler', 
     'delete_income_callback',
-    'income_page_callback',
-    'add_income_start',
-    'show_delete_income',
-    'handle_delete_income',
-    'handle_income_page_navigation'
+    'income_page_callback'
 ]

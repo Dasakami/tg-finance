@@ -13,7 +13,6 @@ class GroupFinance:
     """Класс для управления групповыми финансами"""
     
     def __init__(self):
-        # Таблицы уже создаются в database.py
         pass
     
     def add_group_expense(self, group_id: int, user_id: int, user_name: str,
@@ -218,7 +217,7 @@ async def group_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args:
         try:
             days = int(context.args[0])
-            days = max(1, min(days, 90))  # От 1 до 90 дней
+            days = max(1, min(days, 90)) 
         except ValueError:
             pass
     
@@ -266,7 +265,6 @@ async def group_add_debt(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Парсим получателя
     if not update.message.reply_to_message:
         await update.message.reply_text(
             "Ответь на сообщение человека, которому ты должен, "

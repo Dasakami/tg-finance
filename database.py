@@ -50,7 +50,6 @@ class Database:
         try:
             cursor = conn.cursor()
 
-            # Таблица пользователей
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     user_id BIGINT PRIMARY KEY,
@@ -59,8 +58,6 @@ class Database:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-
-            # Таблица расходов
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS expenses (
                     id SERIAL PRIMARY KEY,
@@ -80,8 +77,6 @@ class Database:
                            amount REAL NOT NULL,
                            reason TEXT) 
                            """)
-
-            # Таблица доходов
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS income (
                     id SERIAL PRIMARY KEY,
@@ -94,7 +89,6 @@ class Database:
                 )
             """)
 
-            # Индексы
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_expenses_user_date 
                 ON expenses (user_id, date DESC)
@@ -104,7 +98,6 @@ class Database:
                 ON income (user_id, date DESC)
             """)
 
-            # Таблица бюджетов
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS budgets (
                     id SERIAL PRIMARY KEY,
@@ -118,7 +111,6 @@ class Database:
                 )
             """)
 
-            # Таблица фильтров категорий
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS category_filters (
                     id SERIAL PRIMARY KEY,
@@ -132,7 +124,6 @@ class Database:
                 )
             """)
 
-            # Таблица подписок
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS subscriptions (
                     id SERIAL PRIMARY KEY,
@@ -146,7 +137,6 @@ class Database:
                 )
             """)
 
-            # Таблица истории платежей
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS payment_history (
                     id SERIAL PRIMARY KEY,
@@ -159,7 +149,6 @@ class Database:
                 )
             """)
 
-            # Групповые расходы
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS group_expenses (
                     id SERIAL PRIMARY KEY,
@@ -173,7 +162,6 @@ class Database:
                 )
             """)
 
-            # Настройки групп
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS group_settings (
                     group_id BIGINT PRIMARY KEY,
@@ -183,8 +171,6 @@ class Database:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-
-            # Групповые долги
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS group_debts (
                     id SERIAL PRIMARY KEY,

@@ -11,7 +11,6 @@ db = Database()
 
 class SubscriptionManager:
     def __init__(self):
-        # Таблицы уже создаются в database.py
         pass
     
     def get_subscription(self, user_id: int) -> Dict:
@@ -28,7 +27,6 @@ class SubscriptionManager:
             row = cursor.fetchone()
             
             if not row:
-                # Создаем запись для нового пользователя
                 self._create_subscription(user_id)
                 return {
                     'user_id': user_id,
@@ -40,7 +38,6 @@ class SubscriptionManager:
             
             sub = dict(row)
             
-            # Проверяем, не истекла ли подписка
             if sub['premium_until']:
                 premium_until = sub['premium_until']
                 if isinstance(premium_until, str):
@@ -51,7 +48,6 @@ class SubscriptionManager:
                     sub['is_premium'] = True
                     sub['days_left'] = (premium_until - now).days
                 else:
-                    # Подписка истекла
                     sub['is_premium'] = False
                     sub['days_left'] = 0
                     self._deactivate_premium(user_id)
@@ -95,17 +91,14 @@ class SubscriptionManager:
         try:
             cursor = conn.cursor()
             
-            # Получаем текущую подписку
             sub = self.get_subscription(user_id)
             
-            # Если подписка активна, продлеваем от текущей даты окончания
             if sub['is_premium'] and sub['premium_until']:
                 premium_until = sub['premium_until']
                 if isinstance(premium_until, str):
                     premium_until = datetime.fromisoformat(premium_until)
                 new_premium_until = premium_until + timedelta(days=30 * months)
             else:
-                # Если подписки нет, активируем с текущего момента
                 new_premium_until = datetime.now() + timedelta(days=30 * months)
             
             cursor.execute('''
@@ -157,7 +150,6 @@ class SubscriptionManager:
                 VALUES (%s, %s, %s, %s)
             ''', (user_id, stars_amount, payment_charge_id, telegram_payment_charge_id))
             
-            # Обновляем счетчик звезд
             cursor.execute('''
                 UPDATE subscriptions
                 SET stars_paid = stars_paid + %s

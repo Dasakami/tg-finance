@@ -42,7 +42,6 @@ async def search_execute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txn_type = "all"
     lowered = text.lower()
     
-    # Проверка префиксов на русском и английском
     if lowered.startswith("расход:") or lowered.startswith("expense:"):
         txn_type = "expenses"
         text = text.split(":", 1)[1].strip()

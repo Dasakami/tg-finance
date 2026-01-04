@@ -7,7 +7,6 @@ db = Database()
 
 class CategoryFilter:
     def __init__(self):
-        # Таблица уже создается в database.py
         pass
     
     def add_filter(self, user_id: int, category: str, is_excluded: bool = True, 

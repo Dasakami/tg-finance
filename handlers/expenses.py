@@ -1,3 +1,7 @@
+"""
+ОБНОВЛЕНИЕ: Добавлены вызовы balance_manager и category_manager
+Замените handlers/expenses.py на этот файл
+"""
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -5,6 +9,9 @@ from telegram.ext import (
     CallbackQueryHandler, filters
 )
 from database import Database
+from balance import balance_manager
+from custom_categories import category_manager
+from notifications import notification_manager
 from utils import format_currency, format_date, parse_user_date
 from handlers.common import cancel
 from config import (
@@ -16,7 +23,6 @@ from config import (
 )
 
 db = Database()
-
 ITEMS_PER_PAGE = 5
 
 
@@ -34,7 +40,22 @@ async def add_expense_amount(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         context.user_data['expense_amount'] = amount
         
-        keyboard = [
+        user_id = update.effective_user.id
+        categories = category_manager.get_categories(user_id, 'expense')
+        
+        keyboard = []
+        
+        custom_cats = [c for c in categories if c['is_custom']][:6]
+        for i in range(0, len(custom_cats), 2):
+            row = []
+            for cat in custom_cats[i:i+2]:
+                row.append(InlineKeyboardButton(
+                    cat['name'],
+                    callback_data=f"cat_{cat['name'].split(' ', 1)[-1]}"
+                ))
+            keyboard.append(row)
+        
+        keyboard.extend([
             [
                 InlineKeyboardButton("🍔 Еда", callback_data="cat_Еда"),
                 InlineKeyboardButton("🚗 Транспорт", callback_data="cat_Транспорт")
@@ -48,7 +69,8 @@ async def add_expense_amount(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 InlineKeyboardButton("🎮 Развлечения", callback_data="cat_Развлечения")
             ],
             [InlineKeyboardButton("✏️ Ввести свою", callback_data="cat_custom")]
-        ]
+        ])
+        
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(
@@ -71,6 +93,9 @@ async def add_expense_category(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             category = update.callback_query.data.replace("cat_", "")
             context.user_data['expense_category'] = category
+            user_id = update.callback_query.from_user.id
+            category_manager.increment_use_count(user_id, category, 'expense')
+            
             await update.callback_query.edit_message_text(
                 f"Категория: {category}\n\n"
                 "Введи описание (или отправь /skip чтобы пропустить):"
@@ -125,6 +150,8 @@ async def add_expense_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     db.add_expense(user_id, amount, category, description, date_value)
     
+    balance_manager.update_balance(user_id, amount, is_income=False)
+    
     response_text = (
         f"✅ Расход добавлен!\n\n"
         f"💰 Сумма: {format_currency(amount)} руб.\n"
@@ -132,7 +159,16 @@ async def add_expense_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{f'📝 Описание: {description}\n' if description else ''}"
         f"📅 Дата: {format_date(date_value.isoformat())}"
     )
-
+    
+    balance = balance_manager.get_balance(user_id)
+    response_text += (
+        f"\n\n💵 <b>Баланс:</b> {format_currency(balance['balance'])} руб.\n"
+        f"🔒 Скрытый: {format_currency(balance['hidden_balance'])} руб."
+    )
+    large_expense_alert = notification_manager.check_large_expense(user_id, amount)
+    if large_expense_alert:
+        response_text += f"\n\n{large_expense_alert}"
+    
     try:
         from budgets import budget_manager
         alert = budget_manager.check_budget_alerts(user_id, category)
@@ -158,6 +194,7 @@ async def add_expense_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     context.user_data.clear()
     return ConversationHandler.END
+
 
 
 def create_expense_delete_keyboard(expenses, page=0):
@@ -194,7 +231,7 @@ def create_expense_delete_keyboard(expenses, page=0):
 
 async def show_delete_expenses(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    expenses = db.get_last_expenses(user_id, limit=50)  # Получаем больше записей для пагинации
+    expenses = db.get_last_expenses(user_id, limit=50)
     
     if not expenses:
         await update.message.reply_text("Пока нет расходов для удаления.")
@@ -211,7 +248,6 @@ async def show_delete_expenses(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def handle_expense_page_navigation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка навигации по страницам расходов"""
     await update.callback_query.answer()
     
     if update.callback_query.data == "exp_page_info":
@@ -238,8 +274,16 @@ async def handle_delete_expense(update: Update, context: ContextTypes.DEFAULT_TY
     expense_id = int(update.callback_query.data.replace("del_exp_", ""))
     user_id = update.effective_user.id
     
-    if db.delete_expense(user_id, expense_id):
-        await update.callback_query.edit_message_text("✅ Расход удален.")
+    expenses = db.get_expenses(user_id, None)
+    expense = next((e for e in expenses if e['id'] == expense_id), None)
+    
+    if expense and db.delete_expense(user_id, expense_id):
+        balance_manager.update_balance(user_id, expense['amount'], is_income=True)
+        
+        await update.callback_query.edit_message_text(
+            f"✅ Расход удален.\n"
+            f"Возвращено на баланс: {format_currency(expense['amount'])} руб."
+        )
         context.user_data.pop('delete_expenses_list', None)
         context.user_data.pop('delete_expenses_page', None)
     else:
@@ -278,9 +322,5 @@ __all__ = [
     'expense_handler',
     'delete_expense_handler',
     'delete_expense_callback',
-    'expense_page_callback',
-    'add_expense_start',
-    'show_delete_expenses',
-    'handle_delete_expense',
-    'handle_expense_page_navigation'
+    'expense_page_callback'
 ]

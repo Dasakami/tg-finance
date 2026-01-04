@@ -44,7 +44,6 @@ class BudgetManager:
             
             budgets = [dict(row) for row in cursor.fetchall()]
             
-            # Добавляем информацию о текущих тратах
             stats = db.get_statistics(user_id, 30)
             for budget in budgets:
                 spent = stats['expenses_by_category'].get(budget['category'], 0)

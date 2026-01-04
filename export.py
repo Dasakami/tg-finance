@@ -177,16 +177,12 @@ def export_to_pdf(db: Database, user_id: int, days: int = None) -> str:
     period_suffix = f"{days}days" if days else "alltime"
     filename = f"finance_report_{user_id}_{period_suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     filepath = os.path.join(os.getcwd(), filename)
-    
-    # Регистрация шрифта с поддержкой кириллицы
     try:
-        # Попытка использовать системный шрифт DejaVu
         pdfmetrics.registerFont(TTFont('DejaVu', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
         pdfmetrics.registerFont(TTFont('DejaVu-Bold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
         font_name = 'DejaVu'
         font_bold = 'DejaVu-Bold'
     except:
-        # Если не удалось, используем встроенный Helvetica (ограниченная поддержка кириллицы)
         font_name = 'Helvetica'
         font_bold = 'Helvetica-Bold'
     
@@ -198,8 +194,6 @@ def export_to_pdf(db: Database, user_id: int, days: int = None) -> str:
         topMargin=20 * mm,
         bottomMargin=20 * mm
     )
-    
-    # Создание стилей с кириллическим шрифтом
     styles = getSampleStyleSheet()
     
     title_style = ParagraphStyle(
@@ -225,8 +219,6 @@ def export_to_pdf(db: Database, user_id: int, days: int = None) -> str:
     title = Paragraph(f"Финансовый отчет за {period_text}", title_style)
     story.append(title)
     story.append(Spacer(1, 12))
-    
-    # Общая статистика
     summary_data = [
         ["Доходы", f"{format_currency(stats['total_income'])} руб."],
         ["Расходы", f"{format_currency(stats['total_expenses'])} руб."],
@@ -245,7 +237,6 @@ def export_to_pdf(db: Database, user_id: int, days: int = None) -> str:
     story.append(summary_table)
     story.append(Spacer(1, 12))
     
-    # Расходы по категориям
     if stats['expenses_by_category']:
         story.append(Paragraph("Расходы по категориям", heading_style))
         expense_rows = [
@@ -262,7 +253,6 @@ def export_to_pdf(db: Database, user_id: int, days: int = None) -> str:
         story.append(expense_table)
         story.append(Spacer(1, 12))
     
-    # Доходы по источникам
     if stats['income_by_source']:
         story.append(Paragraph("Доходы по источникам", heading_style))
         income_rows = [

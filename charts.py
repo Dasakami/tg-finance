@@ -47,8 +47,6 @@ def create_statistics_chart(stats: Dict, period_text: str = "30 дней") -> Op
         axes = [axes]
     else:
         axes = list(axes)
-    
-    # Настройка шрифтов для поддержки кириллицы
     plt.rcParams['font.family'] = 'DejaVu Sans'
     
     if expenses:
