@@ -28,7 +28,6 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.inline_query.from_user.id
     
     if not query:
-        # Показываем подсказки
         results = [
             InlineQueryResultArticle(
                 id=str(uuid4()),
@@ -61,11 +60,9 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.inline_query.answer(results, cache_time=10)
         return
     
-    # Парсим команду
     parsed = parse_inline_command(query)
     
     if not parsed:
-        # Неверный формат
         results = [
             InlineQueryResultArticle(
                 id=str(uuid4()),
@@ -82,11 +79,9 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.inline_query.answer(results, cache_time=1)
         return
     
-    # Формируем результаты
     results = []
     
     if parsed['type'] == 'expense':
-        # Сохраняем в контекст для последующей обработки
         context.user_data[f'inline_expense_{user_id}'] = parsed
         
         results.append(
@@ -107,7 +102,6 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             )
         )
         
-        # Добавляем в БД сразу
         db.add_expense(
             user_id=user_id,
             amount=parsed['amount'],
@@ -135,8 +129,6 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 ]])
             )
         )
-        
-        # Добавляем в БД
         db.add_income(
             user_id=user_id,
             amount=parsed['amount'],
@@ -159,7 +151,6 @@ def parse_inline_command(query: str) -> dict:
     """
     query = query.lower().strip()
     
-    # Определяем тип операции
     operation_type = None
     if query.startswith(('расход', 'expense', 'трата')):
         operation_type = 'expense'
@@ -168,19 +159,16 @@ def parse_inline_command(query: str) -> dict:
     else:
         return None
     
-    # Удаляем ключевое слово
     for keyword in ['расход', 'expense', 'трата', 'доход', 'income', 'приход']:
         if query.startswith(keyword):
             query = query[len(keyword):].strip()
             break
     
-    # Парсим остальное: СУММА КАТЕГОРИЯ [ОПИСАНИЕ]
     parts = query.split(maxsplit=2)
     
     if len(parts) < 2:
         return None
     
-    # Сумма
     try:
         amount = float(parts[0].replace(',', '.'))
         if amount <= 0:
@@ -188,10 +176,8 @@ def parse_inline_command(query: str) -> dict:
     except (ValueError, IndexError):
         return None
     
-    # Категория/источник
     category_or_source = parts[1]
-    
-    # Описание (опционально)
+
     description = parts[2] if len(parts) > 2 else None
     
     result = {
@@ -234,7 +220,6 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
     result = update.chosen_inline_result
     user_id = result.from_user.id
     
-    # Логируем использование
     print(f"User {user_id} used inline mode: {result.query}")
 
 

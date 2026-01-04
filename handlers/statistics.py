@@ -140,11 +140,9 @@ async def show_export_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     
-    # Исправление: правильно парсим callback_data
     callback_data = update.callback_query.data
     days_str = callback_data.replace("exp_", "")
     
-    # Преобразуем в int или None
     if days_str == "all":
         days = None
         period_text = "все время"
@@ -168,8 +166,6 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     filename=f"finance_export_{period_text.replace(' ', '_')}.xlsx",
                     caption=f"📤 Экспорт данных за {period_text}"
                 )
-            
-            # Удаляем файл после отправки
             try:
                 os.remove(file_path)
             except:
@@ -207,11 +203,9 @@ async def show_pdf_export_menu(update: Update, context: ContextTypes.DEFAULT_TYP
 async def handle_pdf_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     
-    # Исправление: правильно парсим callback_data
     callback_data = update.callback_query.data
     days_str = callback_data.replace("pdf_", "")
-    
-    # Преобразуем в int или None
+
     if days_str == "all":
         days = None
         period_text = "все время"
@@ -235,8 +229,6 @@ async def handle_pdf_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     filename=f"finance_report_{period_text.replace(' ', '_')}.pdf",
                     caption=f"📄 PDF-отчет за {period_text}"
                 )
-            
-            # Удаляем файл после отправки
             try:
                 os.remove(file_path)
             except:
@@ -269,7 +261,6 @@ async def show_chart_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def send_statistics_chart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправка диаграммы (для обратной совместимости - 30 дней)"""
-    # Если вызвано через кнопку меню, показываем меню выбора периода
     if update.message:
         await show_chart_menu(update, context)
 
@@ -278,11 +269,8 @@ async def handle_chart_generation(update: Update, context: ContextTypes.DEFAULT_
     """Обработка генерации диаграммы за выбранный период"""
     await update.callback_query.answer()
     
-    # Исправление: правильно парсим callback_data
     callback_data = update.callback_query.data
     days_str = callback_data.replace("chart_", "")
-    
-    # Преобразуем в int или None
     if days_str == "all":
         days = None
         period_text = "все время"
@@ -310,7 +298,6 @@ async def handle_chart_generation(update: Update, context: ContextTypes.DEFAULT_
                 caption=f"📈 Диаграмма расходов/доходов за {period_text}"
             )
         
-        # Удаляем файл после отправки
         try:
             os.remove(chart_path)
         except:

@@ -7,26 +7,20 @@ from budgets import budget_manager
 from utils import format_currency, format_date
 from handlers.common import cancel
 from config import BACK_BUTTON_TEXT
-
-# Импортируем обновленную аналитику
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + '/..')
-
-# Будем использовать обновленные функции
 try:
     from analytics import (
         generate_smart_tips, get_achievements, compare_periods,
         predict_monthly_expenses
     )
 except ImportError:
-    # Fallback на старую аналитику
     from analytics import (
         generate_smart_tips, get_achievements, compare_periods,
         predict_monthly_expenses
     )
 
-# Состояния для бюджетов
 WAITING_FOR_BUDGET_CATEGORY = 100
 WAITING_FOR_BUDGET_AMOUNT = 101
 
@@ -41,7 +35,6 @@ async def show_smart_tips(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, tip in enumerate(tips, 1):
         message += f"{i}. {tip}\n\n"
     
-    # Добавляем подсказку о фильтрах для Premium
     try:
         from subscription import subscription_manager
         if subscription_manager.is_premium(user_id):
@@ -55,7 +48,6 @@ async def show_smart_tips(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def show_achievements(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать достижения и интересные факты"""
     user_id = update.effective_user.id
     data = get_achievements(user_id)
     
@@ -149,7 +141,6 @@ async def show_expense_forecast(update: Update, context: ContextTypes.DEFAULT_TY
     message += f"Всего: {format_currency(forecast['predicted_total'])} руб.\n"
     message += f"Осталось потратить: {format_currency(forecast['predicted_remaining'])} руб.\n\n"
     
-    # Рекомендация
     if forecast['predicted_remaining'] > 0:
         daily_budget = forecast['predicted_remaining'] / max(forecast['days_remaining'], 1)
         message += f"💡 Дневной бюджет: {format_currency(daily_budget)} руб."
@@ -159,13 +150,9 @@ async def show_expense_forecast(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text(message, parse_mode='HTML')
 
 
-# ============= БЮДЖЕТЫ =============
-
 async def show_budgets_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать меню бюджетов"""
     user_id = update.effective_user.id
-    
-    # Проверяем Premium для редактирования
     try:
         from subscription import subscription_manager
         is_premium = subscription_manager.is_premium(user_id)
@@ -325,8 +312,6 @@ async def delete_budget_confirm(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         await update.callback_query.edit_message_text("❌ Не удалось удалить бюджет.")
 
-
-# Обработчики
 budget_conversation = ConversationHandler(
     entry_points=[CallbackQueryHandler(add_budget_start, pattern="^budgets_add$")],
     states={

@@ -16,7 +16,6 @@ from config import BACK_BUTTON_TEXT
 
 db = Database()
 
-# Состояния
 WAITING_FOR_FILTER_CATEGORY = 200
 WAITING_FOR_FILTER_ACTION = 201
 WAITING_FOR_EDIT_BUDGET_AMOUNT = 202
@@ -99,20 +98,19 @@ async def show_premium_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def buy_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Инициировать покупку Premium"""
     await update.callback_query.answer()
-    
-    # Создаем инвойс на 1 звезду
+
     title = "Premium подписка на 1 месяц"
     description = "Доступ ко всем Premium функциям на 30 дней"
     payload = "premium_subscription_1_month"
-    currency = "XTR"  # Telegram Stars
-    prices = [LabeledPrice("Premium на месяц", 1)]  # 1 звезда
+    currency = "XTR"  
+    prices = [LabeledPrice("Premium на месяц", 1)]  
     
     await context.bot.send_invoice(
         chat_id=update.effective_chat.id,
         title=title,
         description=description,
         payload=payload,
-        provider_token="",  # Для Stars не нужен
+        provider_token="",  
         currency=currency,
         prices=prices
     )
@@ -155,8 +153,6 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
             "Обратитесь в поддержку."
         )
 
-
-# ============= УПРАВЛЕНИЕ БЮДЖЕТАМИ (PREMIUM) =============
 
 @premium_required
 async def edit_budget_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -237,8 +233,6 @@ async def edit_budget_amount(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("Неверный формат. Введи число:")
         return WAITING_FOR_EDIT_BUDGET_AMOUNT
 
-
-# ============= ФИЛЬТРЫ КАТЕГОРИЙ =============
 
 @premium_required
 async def show_category_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -429,7 +423,6 @@ async def clear_all_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.edit_message_text("У тебя нет активных фильтров")
 
 
-# ConversationHandler для фильтров
 filter_conversation = ConversationHandler(
     entry_points=[CallbackQueryHandler(add_filter_start, pattern="^add_filter$")],
     states={
@@ -447,7 +440,7 @@ filter_conversation = ConversationHandler(
     ]
 )
 
-# ConversationHandler для редактирования бюджетов
+
 edit_budget_conversation = ConversationHandler(
     entry_points=[CallbackQueryHandler(edit_budget_start, pattern="^budgets_edit$")],
     states={

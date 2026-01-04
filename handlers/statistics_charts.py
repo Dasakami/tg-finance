@@ -11,7 +11,6 @@ from config import BACK_BUTTON_TEXT
 
 db = Database()
 
-# Состояния
 WAITING_FOR_CHART_CATEGORIES = 300
 
 
@@ -49,7 +48,6 @@ async def chart_type_selected(update: Update, context: ContextTypes.DEFAULT_TYPE
     chart_type = update.callback_query.data.replace("chart_type_", "")
     context.user_data['chart_type'] = chart_type
     
-    # Теперь выбираем период
     keyboard = [
         [
             InlineKeyboardButton("30 дней", callback_data="chart_period_30"),
@@ -84,7 +82,6 @@ async def chart_period_selected(update: Update, context: ContextTypes.DEFAULT_TY
     chart_type = context.user_data.get('chart_type', 'pie')
     user_id = update.effective_user.id
     
-    # Получаем статистику
     stats = db.get_statistics(user_id, days)
     
     period_text = {
@@ -92,8 +89,7 @@ async def chart_period_selected(update: Update, context: ContextTypes.DEFAULT_TY
         90: "90 дней",
         None: "все время"
     }.get(days, f"{days} дней")
-    
-    # Генерируем диаграмму
+
     chart_path = create_statistics_chart(
         stats, 
         period_text, 
@@ -125,7 +121,6 @@ async def chart_with_filters_start(update: Update, context: ContextTypes.DEFAULT
     await update.callback_query.answer()
     user_id = update.effective_user.id
     
-    # Проверяем Premium
     try:
         from subscription import subscription_manager
         if not subscription_manager.is_premium(user_id):
@@ -143,7 +138,6 @@ async def chart_with_filters_start(update: Update, context: ContextTypes.DEFAULT
     except ImportError:
         pass
     
-    # Получаем все категории пользователя
     stats = db.get_statistics(user_id, 90)
     categories = list(stats['expenses_by_category'].keys())
     
@@ -153,11 +147,10 @@ async def chart_with_filters_start(update: Update, context: ContextTypes.DEFAULT
         )
         return
     
-    # Показываем список категорий для исключения
     context.user_data['excluded_categories'] = []
     
     keyboard = []
-    for cat in categories[:15]:  # Показываем первые 15
+    for cat in categories[:15]:  
         keyboard.append([
             InlineKeyboardButton(
                 f"☑️ {cat}",
@@ -198,7 +191,6 @@ async def chart_toggle_category(update: Update, context: ContextTypes.DEFAULT_TY
     
     context.user_data['excluded_categories'] = excluded
     
-    # Обновляем клавиатуру
     user_id = update.effective_user.id
     stats = db.get_statistics(user_id, 90)
     categories = list(stats['expenses_by_category'].keys())
@@ -237,7 +229,6 @@ async def chart_filters_done(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     excluded = context.user_data.get('excluded_categories', [])
     
-    # Выбираем тип диаграммы
     keyboard = [
         [
             InlineKeyboardButton("📊 Круговая", callback_data="chart_filtered_pie"),
@@ -264,8 +255,7 @@ async def chart_filtered_type_selected(update: Update, context: ContextTypes.DEF
     chart_type = update.callback_query.data.replace("chart_filtered_", "")
     excluded = context.user_data.get('excluded_categories', [])
     user_id = update.effective_user.id
-    
-    # Генерируем диаграмму с фильтрами
+
     stats = db.get_statistics(user_id, 30)
     
     chart_path = create_statistics_chart(
@@ -306,7 +296,6 @@ async def chart_filters_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 
-# ConversationHandler для диаграмм с фильтрами
 chart_filters_conversation = ConversationHandler(
     entry_points=[CallbackQueryHandler(chart_with_filters_start, pattern="^chart_with_filters$")],
     states={
